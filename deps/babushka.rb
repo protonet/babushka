@@ -99,7 +99,7 @@ end
 dep 'installed.babushka' do
   requires 'ruby', 'git'
   requires_when_unmet 'writable.install_path'
-  setup { set :babushka_source, "git://github.com/benhoskings/babushka.git" }
+  setup { set :babushka_source, "git://github.com/protonet/babushka.git" }
   met? { repo.exists? }
   meet {
     log_block "Cloning #{var(:babushka_source)} into #{repo.path}" do
