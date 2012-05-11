@@ -51,7 +51,7 @@ class String
   #   'key: space-separated value'.val_for('key')                         #=> 'space-separated value'
   #   'key with spaces: space-separated value'.val_for('key with spaces') #=> 'space-separated value'
   def val_for key
-    split("\n").scan(
+    split("\n").grep(
       key.is_a?(Regexp) ? key : /(^|^[^\w]*\s+)#{Regexp.escape(key)}\b/
     ).map {|l|
       l.sub(/^[^\w]*\s+/, '').
