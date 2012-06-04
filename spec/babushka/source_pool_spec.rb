@@ -105,7 +105,7 @@ describe SourcePool, '#template_for' do
   }
   context "without namespacing" do
     it "should find templates in the anonymous source" do
-      Base.sources.template_for('anonymous meta').should == @anonymous_meta
+      Base.sources.template_for('anonymous_meta').should == @anonymous_meta
     end
     it "should find templates in the core source" do
       Base.sources.template_for('core_meta').should == @core_meta
@@ -116,15 +116,16 @@ describe SourcePool, '#template_for' do
     end
     context "with :from" do
       it "should find the template in the same source" do
-        Base.sources.template_for('from test', :from => @source1).should == @from1
-        Base.sources.template_for('from test', :from => @source2).should == @from2
+        Base.sources.template_for('from_test', :from => @source1).should == @from1
+        Base.sources.template_for('from_test', :from => @source2).should == @from2
       end
       context "when it doesn't exist in the :from source" do
         it "should find the template in the core source" do
-          Base.sources.template_for('core from', :from => @source1).should == @core_from
+          Base.sources.template_for('core_from', :from => @source1).should == @core_from
         end
         it "should not find the template in other sources" do
-          Base.sources.template_for('from test 2', :from => @source1).should be_nil
+          Base.sources.template_for('from_test_2', :from => @source1).should be_nil
+          Base.sources.template_for('from_test_2', :from => @source2).should_not be_nil
         end
       end
     end
@@ -132,7 +133,7 @@ describe SourcePool, '#template_for' do
   context "with namespacing" do
     it "should find the dep when the namespace is correct" do
       Base.sources.template_for('source_1:meta_1').should == @meta1
-      Base.sources.template_for('source_2:meta 4').should == @meta4
+      Base.sources.template_for('source_2:meta_4').should == @meta4
     end
     it "should not find the dep when the namespace is wrong" do
       Base.sources.template_for('source_1:').should be_nil
@@ -148,16 +149,14 @@ end
 describe SourcePool, '#load_context' do
   context "without a template" do
     before {
-      Dep.should_receive(:new).with('load_context', Base.sources.anonymous, {}, nil)
+      Dep.should_receive(:new).with('load_context', Base.sources.anonymous, [], {}, nil)
     }
     it "should pass the correct options" do
       dep 'load_context'
     end
   end
   context "with a template" do
-    let(:source) {
-      Source.new *make_source_remote('load_context')
-    }
+    let(:source) { Source.new(nil) }
     let!(:template) {
       Base.sources.load_context :source => source do
         meta 'load_context_template'
@@ -201,8 +200,8 @@ describe "template selection during defining" do
     end
     it "should not find the template with the wrong source prefix, and raise" do
       L{
-        dep('template selection 2', :template => 'source_2:meta_1')
-      }.should raise_error(DepError, "There is no template named 'source_2:meta_1' to define 'template selection 2' against.")
+        dep('template selection 2', :template => 'source_2:meta_1').template
+      }.should raise_error(TemplateNotFound, "There is no template named 'source_2:meta_1' to define 'template selection 2' against.")
     end
   end
   context "without namespacing" do
@@ -213,7 +212,7 @@ describe "template selection during defining" do
       it "should not find a template in the wrong source, and raise" do
         L{
           mock_dep('template selection 4', :template => 'meta_3', :in => @source1).template
-        }.should raise_error(DepError, "There is no template named 'meta_3' to define 'template selection 4' against.")
+        }.should raise_error(TemplateNotFound, "There is no template named 'meta_3' to define 'template selection 4' against.")
       end
     end
     context "with suffixes" do
@@ -251,7 +250,7 @@ describe "template selection during defining from a real source" do
   it "should have loaded templates" do
     @source.templates.names.should =~ [
       'test_template',
-      'test meta 1'
+      'test_meta_1'
     ]
   end
   it "should have defined deps against the correct template" do
@@ -290,7 +289,7 @@ describe "nested source loads" do
   end
   context "after defining external deps" do
     before {
-      @outer_source.find('externally templated').define!
+      @outer_source.find('externally templated').context
     }
     it "should have loaded the nested deps" do
       @nested_source.deps.names.should =~ [
@@ -303,7 +302,7 @@ describe "nested source loads" do
     it "should have loaded the nested templates" do
       @nested_source.templates.names.should =~ [
         'test_template',
-        'test meta 1'
+        'test_meta_1'
       ]
     end
   end

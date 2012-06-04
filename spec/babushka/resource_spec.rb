@@ -12,7 +12,8 @@ describe Resource do
   it "should first attempt to detect type using file extension" do
     Resource.type(archive_path / 'really_a_gzip.zip').should == :zip
   end
-  it "should attempt to detect type via when there is no extension" do
+  it "should attempt to detect type via `file` when there is no extension" do
+    Resource.should_receive(:shell).with("file '#{archive_path / 'zip_without_extension'}'").any_number_of_times.and_return('Zip archive data')
     Resource.type(archive_path / 'zip_without_extension').should == :zip
   end
   it "should detect supported archive types" do
@@ -20,6 +21,7 @@ describe Resource do
     Resource.for(archive_path / 'archive.tbz2').should be_supported
   end
   it "should raise an error on unsupported types" do
+    Resource.should_receive(:shell).with("file '#{archive_path / 'invalid_archive'}'").any_number_of_times.and_return('ASCII text')
     L{
       Resource.for(archive_path / 'invalid_archive')
     }.should raise_error("Don't know how to extract invalid_archive.")
@@ -65,19 +67,77 @@ end
 describe Resource, '#content_subdir' do
   before {
     @resource = Resource.new('test.zip')
-    @resource.stub!(:identity_dirs).and_return(
-      %w[
-        Blah.app
-        Some.pkg
-        Test.bundle
-        Lolcode.tmbundle
-        OMGSettings.prefPane
-        something.else
-        and_a_random.file
-      ]
-    )
   }
-  it "should reject dirs that shouldn't be descended" do
-    @resource.content_subdir.should == 'something.else'
+
+  context "when there is just a single file inside the archive" do
+    before {
+      Dir.stub!(:glob).and_return(['a dir'])
+      File.should_receive(:directory?).with('a dir').and_return(false)
+    }
+    it "should choose it, whatever it's called" do
+      @resource.content_subdir.should be_nil
+    end
+  end
+  context "when there is just a single non-descendable dir inside the archive" do
+    before {
+      Dir.stub!(:glob).and_return(['a dir.app'])
+      File.should_receive(:directory?).with('a dir.app').and_return(true)
+    }
+    it "should choose it, whatever it's called" do
+      @resource.content_subdir.should be_nil
+    end
+  end
+  context "when there is just a single dir inside the archive" do
+    before {
+      Dir.stub!(:glob).and_return(['a dir'])
+      File.should_receive(:directory?).with('a dir').and_return(true)
+    }
+    it "should choose it, whatever it's called" do
+      @resource.content_subdir.should == 'a dir'
+    end
+  end
+  context "when there is more than one dir" do
+    context "and none are named after the archive" do
+      before {
+        Dir.stub!(:glob).and_return(['contents', 'another'])
+      }
+      it "should return nil (so the original extraction dir is used)" do
+        @resource.content_subdir.should be_nil
+      end
+    end
+    context "and one is named after the archive" do
+      before {
+        Dir.stub!(:glob).and_return(['contents', 'test'])
+      }
+      it "should choose the directory named after the archive" do
+        @resource.content_subdir.should == 'test'
+      end
+    end
+  end
+  context "when there are non-descendable dirs" do
+    context "and none are named after the archive" do
+      before {
+        Dir.stub!(:glob).and_return(['contents', 'LaunchBar.app', 'RSpec.tmbundle'])
+      }
+      it "should not choose the non-descendable dir" do
+        @resource.content_subdir.should be_nil
+      end
+    end
+    context "and one is named after the archive" do
+      before {
+        Dir.stub!(:glob).and_return(['contents', 'test.app'])
+      }
+      it "should not choose the non-descendable dir" do
+        @resource.content_subdir.should be_nil
+      end
+    end
+    context "one is named after the archive, and a descendable dir is present too" do
+      before {
+        Dir.stub!(:glob).and_return(['contents', 'test.app', 'test'])
+      }
+      it "should choose the descendable dir" do
+        @resource.content_subdir.should == 'test'
+      end
+    end
   end
 end

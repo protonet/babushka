@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 def version_of *args
-  Babushka::VersionOf::Helpers.VersionOf *args
+  Babushka.VersionOf *args
 end
 
 describe "creation" do
@@ -25,6 +25,11 @@ describe "creation" do
     version_of(version_of('ruby', '1.8')).should == version_of('ruby', '1.8')
     version_of(version_of('ruby', '1.8'), '1.9').should == version_of('ruby', '1.9')
   end
+  it "should accept name with space" do
+    version_of('Google Chrome.app').name.should == 'Google Chrome.app'
+    version_of('Google Chrome.app').version.should == nil
+  end
+  it "should accept name with space and version"
 end
 
 describe "to_s" do
@@ -39,9 +44,30 @@ describe "to_s" do
     end
   end
   describe "versioned" do
-    it "should be separated with -" do
+    it "should be separated with - when no operator is specified" do
       version_of('ruby', '1.8').to_s.should == 'ruby-1.8'
     end
+    it "should be separated with - when the operator is ==" do
+      version_of('ruby', '== 1.8').to_s.should == 'ruby-1.8'
+    end
+    it "should be separated with - when no version is specified" do
+      version_of('ruby', '>= 1.8').to_s.should == 'ruby >= 1.8'
+    end
+  end
+end
+
+describe '#exact?' do
+  it "should be false when there is no version" do
+    version_of('ruby').should_not be_exact
+  end
+  it "should be true when there is a just version number" do
+    version_of('ruby', '1.8').should be_exact
+  end
+  it "should be true when the operator is ==" do
+    version_of('ruby', '== 1.8').should be_exact
+  end
+  it "should be false when the operator is not ==" do
+    version_of('ruby', '>= 1.8').should_not be_exact
   end
 end
 

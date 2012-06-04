@@ -1,3 +1,11 @@
+dep 'package manager', :cmd do
+  met? {
+    in_path?(cmd).tap {|result|
+      unmeetable! "The package manager's binary, #{cmd}, isn't in the $PATH." unless result
+    }
+  }
+end
+
 dep 'macports.src' do
   requires 'build tools'
   provides 'port'
@@ -6,62 +14,16 @@ dep 'macports.src' do
   after { log_shell "Running port selfupdate", "port selfupdate", :sudo => true }
 end
 
-dep 'apt', :template => 'external' do
+dep 'apt' do
+  requires 'package manager'.with('apt-get')
   requires {
-    on :ubuntu, 'main.apt_source', 'universe.apt_source'
-    on :debian, 'main.apt_source'
+    on :ubuntu, 'apt source'.with(:repo => 'main'), 'apt source'.with(:repo => 'universe')
+    on :debian, 'apt source'.with(:repo => 'main')
   }
-  expects 'apt-get'
-  otherwise {
-    log "Your system doesn't seem to have Apt installed. Is it Debian-based?"
-  }
-end
-
-dep 'pacman', :template => 'external' do
-  expects 'pacman'
-  otherwise {
-    log "You seem to be running Arch Linux, but are missing the Pacman package manager. Something is very, very wrong here."
-  }
-end
-
-meta :apt_source do
-  accepts_list_for :source_name
-  template {
-    met? {
-      source_name.all? {|name|
-        grep(/^deb .* #{Babushka::Base.host.name} (\w+ )*#{Regexp.escape(name.to_s)}/, '/etc/apt/sources.list')
-      }
-    }
-    before {
-      # Don't edit sources.list unless we know how to edit it for this debian flavour and version.
-      Babushka::AptHelper.source_for_system and Babushka::Base.host.name
-    }
-    meet {
-      source_name.each {|name|
-        append_to_file "deb #{Babushka::AptHelper.source_for_system} #{Babushka::Base.host.name} #{name}", '/etc/apt/sources.list', :sudo => true
-      }
-    }
-    after { Babushka::AptHelper.update_pkg_lists }
-  }
-end
-
-dep 'main.apt_source' do
-  source_name 'main'
-end
-
-dep 'universe.apt_source' do
-  source_name 'universe'
 end
 
 dep 'homebrew' do
-  requires 'homebrew binary in place', 'build tools'
-end
-
-dep 'yum', :template => 'external' do
-  expects 'yum'
-  otherwise {
-    log "Your system doesn't seem to have Yum installed. Is it Redhat-based?"
-  }
+  requires 'binary.homebrew', 'build tools'
 end
 
 dep 'npm' do
@@ -72,19 +34,14 @@ dep 'npm' do
   }
 end
 
-dep 'nodejs.src' do
-  source 'git://github.com/joyent/node.git'
-  provides 'node >= 0.4', 'node-waf'
-end
-
 dep 'pip' do
   requires {
     on :osx, 'pip.src'
-    otherwise 'pip.managed'
+    otherwise 'pip.bin'
   }
 end
 
-dep 'pip.managed' do
+dep 'pip.bin' do
   installs 'python-pip'
 end
 

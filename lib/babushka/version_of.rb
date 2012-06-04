@@ -1,28 +1,40 @@
 module Babushka
+
+  def VersionOf first, *rest
+    # Convert the arguments into a VersionOf. If a single string argument is
+    # passed, try splitting it on space to separate name and version. Otherwise,
+    # pass the arguments as-is, splatting if required.
+    if rest.any?
+      Babushka::VersionOf.new(*[first].concat(rest))
+    elsif first.is_a?(String)
+      name, version = first.split(' ', 2)
+      if version && VersionStr.parseable_version?(version)
+        Babushka::VersionOf.new(name, version)
+      else
+        Babushka::VersionOf.new(first)
+      end
+    elsif first.is_a?(Array)
+      Babushka::VersionOf.new(*first)
+    else
+      Babushka::VersionOf.new(first)
+    end
+  end
+
+  module_function :VersionOf
+
   class VersionOf
     module Helpers
-      module_function
-
       def VersionOf first, *rest
-        # Convert the arguments into a VersionOf. If a single string argument is
-        # passed, try splitting it on space to separate name and version. Otherwise,
-        # pass the arguments as-is, splatting if required.
-        if rest.any?
-          Babushka::VersionOf.new *[first].concat(rest)
-        elsif first.is_a?(String)
-          Babushka::VersionOf.new *first.split(' ', 2)
-        elsif first.is_a?(Array)
-          Babushka::VersionOf.new *first
-        else
-          Babushka::VersionOf.new first
-        end
+        # TODO: decide on the form for this and deprecate the others.
+        Babushka.VersionOf(first, *rest)
       end
+      module_function :VersionOf
     end
 
     attr_accessor :name, :version
 
     def initialize name, version = nil
-      @name = name.respond_to?(:name) ? name.name : name
+      @name = name.is_a?(VersionOf) ? name.name : name
       @version = if version.nil?
         name.version if name.respond_to?(:version)
       elsif version.is_a? VersionStr
@@ -54,8 +66,14 @@ module Babushka
       end
     end
 
-    def to_s joinery = '-'
-      [name, version].compact * joinery
+    def to_s
+      # == joins with a dash to produce versions like 'rack-1.4.1'; anything
+      # else joins with space like 'rack >= 1.4'.
+      [name, version].compact * (exact? ? '-' : ' ')
+    end
+
+    def exact?
+      !version.nil? && version.operator == '=='
     end
 
     def inspect

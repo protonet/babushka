@@ -26,7 +26,7 @@ end
 describe GitRepo, 'creation' do
   before(:all) { stub_repo 'a' }
   it "should return nil on nonexistent paths" do
-    Babushka::GitRepo.new(tmp_prefix / 'repos/nonexistent').root.should == nil
+    Babushka::GitRepo.new(tmp_prefix / 'repos/missing').root.should == nil
   end
   it "should return nil on non-repo paths" do
     Babushka::GitRepo.new(tmp_prefix / 'repos').root.should == nil
@@ -55,13 +55,13 @@ describe GitRepo, 'creation' do
 end
 
 describe GitRepo, 'without a repo' do
-  subject { Babushka::GitRepo.new(tmp_prefix / 'repos/nonexistent') }
+  subject { Babushka::GitRepo.new(tmp_prefix / 'repos/missing') }
   it "should not exist" do
     subject.exists?.should be_false
   end
   [:clean?, :dirty?, :current_branch, :current_head, :remote_branch_exists?, :ahead?].each {|method|
     it "should raise on #{method}" do
-      L{ subject.send(method) }.should raise_error(Babushka::GitRepoError, "There is no repo at #{tmp_prefix / 'repos/nonexistent'}.")
+      L{ subject.send(method) }.should raise_error(Babushka::GitRepoError, "There is no repo at #{tmp_prefix / 'repos/missing'}.")
     end
   }
   context "with lazy eval" do
@@ -120,6 +120,19 @@ describe GitRepo, '#clean? / #dirty?' do
         end
       end
     end
+  end
+end
+
+describe GitRepo, '#include?' do
+  before(:all) { stub_repo 'a' }
+  subject { Babushka::GitRepo.new(tmp_prefix / 'repos/a') }
+  it "should return true for valid commits" do
+    subject.include?('20758f2d9d696c51ac83a0fd36626d421057b24d').should be_true
+    subject.include?('20758f2').should be_true
+  end
+  it "should return false for nonexistent commits" do
+    subject.include?('20758f2d9d696c51ac83a0fd36626d421057b24e').should be_false
+    subject.include?('20758f3').should be_false
   end
 end
 
@@ -283,7 +296,7 @@ describe GitRepo, '#clone!' do
     context "when the clone fails" do
       it "should raise" do
         L{
-          subject.clone!(tmp_prefix / 'repos/a_remote/nonexistent.git')
+          subject.clone!(tmp_prefix / 'repos/a_remote/missing.git')
         }.should raise_error(GitRepoError)
       end
     end
@@ -319,7 +332,7 @@ describe GitRepo, '#branch!' do
   it "should not already have a next branch" do
     subject.branches.should_not include('next')
   end
-  context "after tracking" do
+  context "after branching" do
     before { subject.branch! "next" }
     it "should have created a next branch" do
       subject.branches.should include('next')

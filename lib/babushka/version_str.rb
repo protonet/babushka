@@ -8,13 +8,8 @@ module Babushka
     attr_reader :pieces, :operator, :version
     GemVersionOperators = %w[= == != > < >= <= ~>].freeze
 
-    def <=> other
-      other = other.to_version unless other.is_a? VersionStr
-      max_length = [pieces.length, other.pieces.length].max
-      (0...max_length).to_a.pick {|index|
-        result = compare_pieces pieces[index], other.pieces[index]
-        result unless result == 0
-      } || 0
+    def self.parseable_version? str
+      !str.nil? && !str[/\d|HEAD/].nil?
     end
 
     def initialize str
@@ -22,7 +17,7 @@ module Babushka
 
       if !(@operator.nil? || GemVersionOperators.include?(@operator))
         raise InvalidVersionOperator, "VersionStr.new('#{str}'): invalid operator '#{@operator}'."
-      elsif @version.nil?
+      elsif !self.class.parseable_version?(@version)
         raise InvalidVersionStr, "VersionStr.new('#{str}'): couldn't parse a version number."
       else
         @pieces = @version.strip.scan(/\d+|[a-zA-Z]+|\w+/).map {|piece|
@@ -34,6 +29,15 @@ module Babushka
 
     def to_s
       @operator == '==' ? @version : "#{@operator} #{@version}"
+    end
+
+    def <=> other
+      other = other.to_version unless other.is_a? VersionStr
+      max_length = [pieces.length, other.pieces.length].max
+      (0...max_length).to_a.pick {|index|
+        result = compare_pieces pieces[index], other.pieces[index]
+        result unless result == 0
+      } || 0
     end
 
     define_method "!=" do |other|

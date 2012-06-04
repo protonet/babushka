@@ -57,6 +57,16 @@ describe Array, '#collapse' do
       'master'
     ]
   end
+  it "should use the replacement if passed" do
+    [
+      "Chain fail2ban-nginx-catchall (1 references)",
+      "target     prot opt source               destination",
+      "DROP       all  --  58.161.41.76         0.0.0.0/0  ",
+      "RETURN     all  --  0.0.0.0/0            0.0.0.0/0  "
+    ].collapse(/^DROP\s+[^\d]+([\d\.]+)\s+.*/, '\1').should == [
+      '58.161.41.76'
+    ]
+  end
 end
 
 describe Array, '#local_group_by' do
@@ -136,6 +146,9 @@ describe String, "val_for" do
   end
   it "whitespace in both" do
     'key with spaces: space-separated value'.val_for('key with spaces').should == 'space-separated value'
+  end
+  it "key ending in non-word characters" do
+    "psql (PostgreSQL) 9.1.0".val_for('psql (PostgreSQL)').should == '9.1.0'
   end
   it "non-word leading characters" do
     '*key: value'.val_for('*key').should == 'value'

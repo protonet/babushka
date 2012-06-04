@@ -1,50 +1,43 @@
 module Babushka
   class DepPool
 
-    attr_reader :skipped_count
-
     def initialize source
       clear!
-      @skipped_count = 0
       @source = source
     end
 
     def count
-      @dep_hash.length
-    end
-    
-    def names
-      @dep_hash.keys
-    end
-    def deps
-      @dep_hash.values
-    end
-    def for spec
-      spec.respond_to?(:name) ? @dep_hash[spec.name] : @dep_hash[spec]
+      @pool.length
     end
 
-    def add name, in_opts, block
-      if self.for name
-        @skipped_count += 1
-        self.for name
-      else
-        Dep.new name, @source, in_opts, block
+    def names
+      @pool.keys
+    end
+    def items
+      @pool.values
+    end
+    def for spec
+      spec.respond_to?(:name) ? @pool[spec.name] : @pool[spec]
+    end
+
+    def add_dep name, params, block
+      self.for(name) || begin
+        opts = params.extract_options!
+        Dep.new name, @source, params, opts, block
       end
     end
 
-    def clear!
-      @dep_hash = {}
-    end
-    def uncache!
-      deps.each {|dep| dep.send :uncache! }
-    end
-    def define_deps!
-      deps.each {|dep| dep.define! }
+    def add_template name, in_opts, block
+      MetaDep.for name, @source, in_opts, &block
     end
 
-    def register dep
-      raise "There is already a registered dep called '#{dep.name}'." if @dep_hash.has_key?(dep.name)
-      @dep_hash[dep.name] = dep
+    def clear!
+      @pool = {}
+    end
+
+    def register item
+      raise "Already registered '#{item.name}'." if @pool.has_key?(item.name)
+      @pool[item.name] = item
     end
 
   end

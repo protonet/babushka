@@ -25,35 +25,3 @@ class Object
     tap { puts "#{File.basename caller[2]}: #{self.inspect}" }
   end
 end
-
-unless Object.new.respond_to? :instance_exec
-  # http://eigenclass.org/hiki/bounded+space+instance_exec
-  class Object
-    module InstanceExecHelper; end
-    include InstanceExecHelper
-
-    # Executes the given block within the context of the receiver. In
-    # order to set the context, the variable self is set to this object
-    # while the block is executing, giving the code access to this object's
-    # instance variables. Arguments are passed as block parameters.
-    #
-    # This is a fallback implementation for older rubies that don't have
-    # a built-in #instance_exec.
-    def instance_exec(*args, &block)
-      begin
-        old_critical, Thread.critical = Thread.critical, true
-        n = 0
-        n += 1 while respond_to?(mname="__instance_exec#{n}")
-        InstanceExecHelper.module_eval{ define_method(mname, &block) }
-      ensure
-        Thread.critical = old_critical
-      end
-      begin
-        ret = send(mname, *args)
-      ensure
-        InstanceExecHelper.module_eval{ remove_method(mname) } rescue nil
-      end
-      ret
-    end
-  end
-end

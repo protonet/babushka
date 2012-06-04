@@ -4,8 +4,6 @@ meta :src do
   accepts_list_for :provides, :basename
   accepts_value_for :prefix, '/usr/local'
 
-  accepts_block_for :preconfigure
-
   accepts_block_for(:preconfigure) {
     if './configure'.p.exists?
       true # No preconfigure needed
@@ -24,11 +22,11 @@ meta :src do
   accepts_block_for(:postinstall)
 
   accepts_block_for(:process_source) {
-    call_task(:preconfigure) and
-    call_task(:configure) and
-    call_task(:build) and
-    call_task(:install) and
-    call_task(:postinstall)
+    invoke(:preconfigure) and
+    invoke(:configure) and
+    invoke(:build) and
+    invoke(:install) and
+    invoke(:postinstall)
   }
 
   def default_configure_command
@@ -36,9 +34,9 @@ meta :src do
   end
 
   template {
-    requires 'build tools', 'curl.managed'
+    requires 'build tools', 'curl.bin'
     prepare { setup_source_uris }
-    met? { in_path? }
-    meet { process_sources { call_task :process_source } }
+    met? { in_path?(provides) }
+    meet { process_sources { invoke(:process_source) } }
   }
 end

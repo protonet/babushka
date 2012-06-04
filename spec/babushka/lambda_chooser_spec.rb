@@ -12,14 +12,8 @@ describe "lambda choosing" do
     LambdaChooser.new(nil, :ours, :theirs) {
       on :ours, "this is ours"
       on :theirs, "this is theirs"
+      "block value should be ignored"
     }.choose(:ours, :on).should == ["this is ours"]
-    describe "with a block value" do
-      LambdaChooser.new(nil, :ours, :theirs) {
-        on :ours, "this is ours"
-        on :theirs, "this is theirs"
-        "block value"
-      }.choose(:ours, :on).should == ["this is ours"]
-    end
   end
 
   it "should pick the first choice from multiple choices" do
@@ -35,10 +29,34 @@ describe "lambda choosing" do
     }.choose([:ours, :yours], :on).should == ["this is ours"]
   end
 
+  context "with multiple targets" do
+    it "should choose the specified call" do
+      LambdaChooser.new(nil, :ours, :theirs, :yours) {
+        on :ours, "this is ours"
+        on [:theirs, :yours], "this is theirs or yours"
+        "block value should be ignored"
+      }.choose(:yours, :on).should == ["this is theirs or yours"]
+    end
+    it "should pick the first choice from multiple choices" do
+      LambdaChooser.new(nil, :ours, :yours, :theirs) {
+        on :ours, "this is ours"
+        on [:theirs, :yours], "this is theirs or yours"
+      }.choose([:ours, :yours], :on).should == ["this is ours"]
+      LambdaChooser.new(nil, :ours, :yours, :theirs) {
+        on :ours, "this is ours"
+        on [:theirs, :yours], "this is theirs or yours"
+      }.choose([:theirs, :ours], :on).should == ["this is theirs or yours"]
+      LambdaChooser.new(nil, :ours, :yours, :theirs) {
+        on :ours, "this is ours"
+        on [:theirs, :yours], "this is theirs or yours"
+      }.choose([:yours, :ours], :on).should == ["this is theirs or yours"]
+    end
+  end
+
   it "should reject :otherwise as a choice name" do
     L{
       LambdaChooser.new(nil, :ours, :yours, :otherwise)
-    }.should raise_error ArgumentError, "You can't use :otherwise as a choice name, because it's reserved."
+    }.should raise_error(ArgumentError, "You can't use :otherwise as a choice name, because it's reserved.")
   end
 
   it "should pick 'otherwise' if no choices match" do
@@ -74,10 +92,20 @@ describe "lambda choosing" do
       on :ours, "this is ours"
       on :theirs, "this is theirs"
     }.choose(:ours).should == ["this is ours"]
+  end
+
+  it "should accept a custom choice method" do
+    LambdaChooser.new(nil, :ours, :theirs) {
+      via :ours, "this is ours"
+      via :theirs, "this is theirs"
+    }.choose(:ours, :via).should == ["this is ours"]
+  end
+
+  it "should still respond to #on when a custom method is passed" do
     LambdaChooser.new(nil, :ours, :theirs) {
       on :ours, "this is ours"
       on :theirs, "this is theirs"
-    }.choose(:ours, nil).should == ["this is ours"]
+    }.choose(:ours, :via).should == ["this is ours"]
   end
 
   it "should reject values and block together" do
@@ -112,4 +140,14 @@ describe "lambda choosing" do
       }.choose(:ours, :on).should == expected
     }
   end
+
+  it "should return Dep::Requirement input intact" do
+    LambdaChooser.new(nil, :ours, :theirs) {
+      on :ours, 'a dep'.with('an arg'), 'another dep'.with('another arg')
+    }.choose(:ours, :on).should == [
+      Dep::Requirement.new('a dep', ['an arg']),
+      Dep::Requirement.new('another dep', ['another arg'])
+    ]
+  end
+
 end

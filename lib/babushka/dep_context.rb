@@ -1,6 +1,7 @@
 module Babushka
   class DepContext < DepDefiner
-    include BaseDepRunner
+    include GitHelpers
+    include UriHelpers
 
     accepts_list_for :desc
     accepts_list_for :requires
@@ -14,5 +15,11 @@ module Babushka
     accepts_block_for :before
     accepts_block_for :meet
     accepts_block_for :after
+
+    private
+
+    def in_path? provided_list
+      PathChecker.in_path? provided_list
+    end
   end
 end

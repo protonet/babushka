@@ -1,7 +1,7 @@
-dep 'rubygems' do
-  def version; '1.6.2' end
+dep 'rubygems', :version do
+  version.default!('1.8.10')
   requires 'ruby'
-  requires_when_unmet 'curl.managed'
+  requires_when_unmet 'curl.bin'
   met? {
     # We check for ruby here too to make sure `ruby` and `gem` run from the same place.
     in_path? ["gem >= #{version}", 'ruby']
@@ -14,8 +14,10 @@ dep 'rubygems' do
   after {
     %w[cache ruby specs].each {|name| ('~/.gem' / name).mkdir }
     cd cmd_dir('ruby') do
-      if File.exists? 'gem1.8'
-        shell "ln -sf gem1.8 gem", :sudo => !File.writable?(which('ruby'))
+      %w[gem1.8 gem18].each do |file|
+        if File.exists? file
+          shell "ln -sf #{file} gem", :sudo => !File.writable?(which('ruby'))
+        end
       end
     end
   }

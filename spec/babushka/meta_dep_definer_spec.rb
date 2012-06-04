@@ -1,9 +1,18 @@
 require 'spec_helper'
 require 'dep_definer_support'
 
-shared_examples_for 'defined meta dep' do
+describe "declaration" do
+  before {
+    @meta = meta 'test'
+  }
+  it "should work" do
+    L{ meta 'count_test' }.should change(Base.sources.anonymous.templates, :count).by(1)
+  end
   it "should set the name" do
     @meta.name.should == 'test'
+  end
+  it "should downcase the name" do
+    meta("Case_Test").name.should == 'case_test'
   end
   it "should set the source" do
     @meta.source.should == Base.sources.anonymous
@@ -18,38 +27,8 @@ shared_examples_for 'defined meta dep' do
   it "should not define a dep helper" do
     Object.new.should_not respond_to('test')
   end
-end
-
-describe "declaration" do
-  before {
-    @meta = meta 'test'
-  }
-  it "should work" do
-    L{ meta 'count_test' }.should change(Base.sources.anonymous.templates, :count).by(1)
-  end
-  it_should_behave_like 'defined meta dep'
   it "should not be marked as suffixed" do
     @meta.opts[:suffix].should be_false
-  end
-  after { Base.sources.anonymous.templates.clear! }
-end
-
-describe "declaration with dot" do
-  before {
-    @meta = meta '.test'
-  }
-  it "should work" do
-    L{ meta '.suffix_count_test' }.should change(Base.sources.anonymous.templates, :count).by(1)
-  end
-  it_should_behave_like 'defined meta dep'
-  it "should be marked as suffixed" do
-    @meta.opts[:suffix].should be_true
-  end
-  describe "collisions" do
-    before { meta 'collision_test' }
-    it "should conflict, disregarding the dot" do
-      L{ meta '.collision_test' }.should raise_error(ArgumentError, "A template called 'collision_test' has already been defined.")
-    end
   end
   after { Base.sources.anonymous.templates.clear! }
 end
@@ -59,7 +38,7 @@ describe "using" do
     it "should not define deps as options" do
       L{
         dep('something undefined', :template => 'undefined').should be_nil
-      }.should raise_error(DepError, "There is no template named 'undefined' to define 'something undefined' against.")
+      }.should raise_error(TemplateNotFound, "There is no template named 'undefined' to define 'something undefined' against.")
     end
     it "should define deps as options" do
       dep('something.undefined').should be_an_instance_of(Dep)
@@ -68,7 +47,7 @@ describe "using" do
 
   describe "without template" do
     before {
-      @meta = meta('.templateless_test') {}
+      @meta = meta('templateless_test') {}
     }
     it "should define deps based on the template" do
       dep('templateless dep.templateless_test').template.should == @meta
@@ -95,13 +74,13 @@ describe "using" do
     it "should define the helper on the context class" do
       @meta.context_class.respond_to?(:a_helper).should be_false
       @meta.context_class.new(nil).respond_to?(:a_helper).should be_false
-      dep('dep1.template_test').context.respond_to?(:a_helper).should be_true
+      dep('dep1.template_test').context.define!.respond_to?(:a_helper).should be_true
     end
     it "should correctly define the helper method" do
       dep('dep2.template_test').context.a_helper_method.should == 'hello from the helper!'
     end
     it "should correctly define the helper" do
-      dep('dep2.template_test').context.a_helper.should == 'hello from the helper in the template!'
+      dep('dep2.template_test').context.define!.a_helper.should == 'hello from the helper in the template!'
     end
     it "should correctly define the met? block" do
       dep('dep3.template_test').send(:process_task, :met?).should == 'this dep is met.'
@@ -144,5 +123,22 @@ describe "using" do
       block_called.should be_true
     end
     after { Base.sources.anonymous.templates.clear! }
+  end
+
+  describe "calling accepted blocks" do
+    let(:a_meta) {
+      meta :acceptor_calling_test do
+        accepts_block_for(:testing) {
+          self
+        }
+      end
+    }
+    let(:a_dep) {
+      dep 'acceptor calling test', :template => a_meta.name
+    }
+
+    it "should run the default block in the dep's context" do
+      a_dep.context.invoke(:testing).should == a_dep.context
+    end
   end
 end

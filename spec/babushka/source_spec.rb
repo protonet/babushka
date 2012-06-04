@@ -19,19 +19,29 @@ describe Source do
     it "should label nil paths as implicit" do
       Source.discover_uri_and_type(nil).should == [nil, :implicit]
     end
-    it "should work for public uris" do
+    it "should treat URLs containing auth info as private" do
+      [
+        'http://ben@server.org/benhoskings/babushka.git',
+        'https://ben:secret@server.org/benhoskings/babushka.git'
+      ].each {|uri|
+        Source.discover_uri_and_type(uri).should == [uri, :private]
+      }
+    end
+    it "should treat git:// and friends as public" do
       [
         'git://github.com/benhoskings/babushka-deps.git',
         'http://github.com/benhoskings/babushka-deps.git',
+        'https://github.com/benhoskings/babushka-deps.git',
         'file:///Users/ben/babushka/deps'
       ].each {|uri|
         Source.discover_uri_and_type(uri).should == [uri, :public]
       }
     end
-    it "should work for private uris" do
+    it "should treat ssh-style URLs as private" do
       [
         'git@github.com:benhoskings/babushka-deps.git',
-        'benhoskin.gs:~ben/babushka-deps.git'
+        'benhoskin.gs:~ben/babushka-deps.git',
+        'ben.local:/Users/ben/babushka-deps.git'
       ].each {|uri|
         Source.discover_uri_and_type(uri).should == [uri, :private]
       }
@@ -86,11 +96,47 @@ describe Source do
     end
   end
 
+  describe Source, '#cloneable?' do
+    it "should work for implicit sources" do
+      Source.new(nil).should_not be_cloneable
+    end
+    it "should work for local sources" do
+      Source.new('~/.babushka/deps').should_not be_cloneable
+    end
+    it "should work for public sources" do
+      Source.new('git://github.com/benhoskings/babushka-deps.git').should be_cloneable
+    end
+    it "should work for private sources" do
+      Source.new('git@github.com:benhoskings/babushka-deps.git').should be_cloneable
+    end
+  end
+
+  describe "#cloned?" do
+    it "should return false for implicit sources" do
+      Source.new(nil).should_not be_cloned
+    end
+    it "should return false for local sources" do
+      Source.new(nil).should_not be_cloned
+    end
+    context "for cloneable repos" do
+      subject { Source.new(*@remote_2) }
+      it "should not be cloned" do
+        subject.should_not be_cloned
+      end
+      it "should be cloned after loading" do
+        subject.load!
+        subject.should be_cloned
+      end
+      after {
+        subject.path.rm
+      }
+    end
+  end
+
   describe "loading deps" do
     context "with a good source" do
       before {
         @source = Source.new('spec/deps/good')
-        @source.stub!(:define_deps!)
         @source.load!
       }
       it "should load deps from a file" do
@@ -99,7 +145,7 @@ describe Source do
       end
       it "should not have defined the deps" do
         dep = @source.deps.for('test dep 1')
-        dep.dep_defined?.should be_false
+        dep.context.should_not be_loaded
       end
       it "should store the source the dep was loaded from" do
         @source.deps.for('test dep 1').dep_source.should == @source
@@ -108,12 +154,40 @@ describe Source do
     context "with a source with errors" do
       before {
         @source = Source.new('spec/deps/bad')
-        @source.stub!(:define_deps!)
         @source.load!
       }
       it "should recover from load errors" do
         @source.deps.names.should include('broken test dep 1')
         @source.deps.names.should include('test dep 1')
+      end
+    end
+  end
+
+  describe "loading deps with parameters" do
+    let(:source) { Source.new('spec/deps/params').tap(&:load!) }
+    let(:requires) { source.deps.for('top-level dep with params').context.define!.requires }
+    it "should store the right number of requirements" do
+      requires.length.should == 2
+    end
+    it "should store the right kinds of objects" do
+      requires.map(&:class).should == [String, Babushka::Dep::Requirement]
+    end
+    it "should store string requirements properly" do
+      requires.first.should == 'a dep without params'
+    end
+    context "requirements" do
+      let(:requirement) { requires.last }
+      it "should store the name properly" do
+        requirement.name.should == 'another dep with params'
+      end
+      context "arguments" do
+        let(:args) { requirement.args }
+        it "should store parameters" do
+          args.map(&:class).should == [Parameter]
+        end
+        it "should store the name properly" do
+          args.map(&:name).should == [:param]
+        end
       end
     end
   end
@@ -128,7 +202,7 @@ describe Source do
         @dep = @source.deps.for('test dep 1')
       }
       it "should not have defined the deps" do
-        @dep.dep_defined?.should == nil
+        @dep.context.should_not be_loaded
       end
     end
   end
@@ -146,6 +220,7 @@ describe Source do
   end
 
   describe Source, ".for_path" do
+    let(:source) { Source.for_path(source_path) }
     context "on a file" do
       before {
         `mkdir -p "#{tmp_prefix / 'sources'}"`
@@ -154,43 +229,52 @@ describe Source do
       it "should raise when called on a file" do
         L{
           Source.for_path(Source.source_prefix / 'regular_file')
-        }.should raise_error(ArgumentError, "The path #{Source.source_prefix / 'regular_file'} isn't a directory.")
+        }.should raise_error(Errno::ENOTDIR, "Not a directory - #{Source.source_prefix / 'regular_file'}")
       end
     end
     context "on a dir" do
+      let(:source_path) { tmp_prefix / 'ad_hoc_source' }
       before {
         `mkdir -p "#{tmp_prefix / 'ad_hoc_source'}"`
-        @source = Source.for_path(tmp_prefix / 'ad_hoc_source')
       }
       it "should work on a dir" do
-        @source.should be_present
-        @source.path.should == tmp_prefix / 'ad_hoc_source'
-        @source.name.should == 'ad_hoc_source'
+        source.should be_present
+        source.path.should == tmp_prefix / 'ad_hoc_source'
+        source.name.should == 'ad_hoc_source'
+      end
+      it "should cache the source" do
+        Source.for_path(source_path).object_id.should == Source.for_path(source_path).object_id
       end
     end
     context "on a git repo" do
+      let(:source_path) { Source.source_prefix / 'remote_1' }
       before {
         Source.new(@remote_1.first).add!
-        @source = Source.for_path(Source.source_prefix / 'remote_1')
       }
       it "should work on a git repo" do
-        @source.should be_present
-        @source.path.should == Source.source_prefix / 'remote_1'
-        @source.name.should == 'remote_1'
+        source.should be_present
+        source.path.should == Source.source_prefix / 'remote_1'
+        source.name.should == 'remote_1'
       end
-      after { @source.remove! }
+      it "should cache the source" do
+        Source.for_path(source_path).object_id.should == Source.for_path(source_path).object_id
+      end
+      after { source.remove! }
     end
     context "on a git repo with a custom name" do
+      let(:source_path) { Source.source_prefix / 'custom_name_test' }
       before {
         Source.new(@remote_1.first, :name => 'custom_name_test').add!
-        @source = Source.for_path(Source.source_prefix / 'custom_name_test')
       }
       it "should work on a git repo" do
-        @source.should be_present
-        @source.path.should == Source.source_prefix / 'custom_name_test'
-        @source.name.should == 'custom_name_test'
+        source.should be_present
+        source.path.should == Source.source_prefix / 'custom_name_test'
+        source.name.should == 'custom_name_test'
       end
-      after { @source.remove! }
+      it "should cache the source" do
+        Source.for_path(source_path).object_id.should == Source.for_path(source_path).object_id
+      end
+      after { source.remove! }
     end
   end
 
@@ -201,11 +285,11 @@ describe Source do
     }
     it "should find the specified dep" do
       @source.find('test dep 1').should be_an_instance_of(Dep)
-      @source.deps.deps.include?(@source.find('test dep 1')).should be_true
+      @source.deps.items.include?(@source.find('test dep 1')).should be_true
     end
     it "should find the specified template" do
-      @source.find_template('test meta 1').should be_an_instance_of(MetaDep)
-      @source.templates.templates.include?(@source.find_template('test meta 1')).should be_true
+      @source.find_template('test_meta_1').should be_an_instance_of(MetaDep)
+      @source.templates.items.include?(@source.find_template('test_meta_1')).should be_true
     end
   end
 
@@ -215,7 +299,7 @@ describe Source do
         Source.new('spec/deps/good').should be_present
       end
       it "should be false for invalid paths" do
-        Source.new('spec/deps/nonexistent').should_not be_present
+        Source.new('spec/deps/missing').should_not be_present
       end
     end
     context "for remote repos" do
@@ -245,7 +329,7 @@ describe Source do
   describe "cloning" do
     context "unreadable sources" do
       before {
-        @source = Source.new(tmp_prefix / "nonexistent.git", :name => 'unreadable')
+        @source = Source.new(tmp_prefix / "missing.git", :name => 'unreadable')
         @source.add!
       }
       it "shouldn't work" do
@@ -281,9 +365,8 @@ describe Source do
           @nameless = Source.new(@remote_1.first)
         }
         it "should use the basename as the name" do
-          File.directory?(tmp_prefix / 'sources/remote_1').should be_false
+          @nameless.should_receive(:git).with(@remote_1.first, :to => (tmp_prefix / 'sources/remote_1'), :log => true)
           @nameless.add!
-          File.directory?(tmp_prefix / 'sources/remote_1').should be_true
         end
         it "should set the name in the source" do
           @nameless.name.should == 'remote_1'
@@ -342,13 +425,33 @@ describe Source do
     end
   end
 
+  describe "updating" do
+    before {
+      @source = Source.new(*@remote_2)
+    }
+    it "should update when the source isn't cloned" do
+      @source.should_receive(:update!)
+      @source.load!
+    end
+    it "should not update when the source is already cloned" do
+      @source.stub!(:cloned?).and_return(true)
+      @source.should_not_receive(:update!)
+      @source.load!
+    end
+    it "should update when the source is already cloned and update is true" do
+      @source.stub!(:cloned?).and_return(true)
+      @source.should_receive(:update!)
+      @source.load!(true)
+    end
+  end
+
   describe "classification" do
     it "should treat file:// as public" do
-      (source = Source.new(*@remote_1)).add!
+      (source = Source.new(*@remote_1))
       [source.uri, source.name, source.type].should == [@remote_1.first, 'remote_1', :public]
     end
     it "should treat local paths as local" do
-      (source = Source.new(@remote_1.first.gsub(/^file:\/\//, ''), @remote_1.last)).add!
+      (source = Source.new(@remote_1.first.gsub(/^file:\/\//, ''), @remote_1.last))
       [source.uri, source.name, source.type].should == [@remote_1.first.gsub(/^file:\/\//, ''), 'remote_1', :local]
     end
   end

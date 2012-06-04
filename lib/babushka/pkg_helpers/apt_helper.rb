@@ -8,10 +8,8 @@ module Babushka
     end
     def manager_key; :apt end
 
-    def _install! pkgs, opts
-      wait_for_dpkg
-      log_shell "Downloading", "#{pkg_cmd} -y -d install #{pkgs.join(' ')}", :sudo => should_sudo?
-      super
+    def manager_dep
+      'apt'
     end
 
     def update_pkg_lists_if_required
@@ -25,16 +23,23 @@ module Babushka
 
     def source_for_system
       {
-        :debian => 'http://archive.debian.org/debian',
+        :debian => 'http://ftp.debian.org/debian',
         :ubuntu => 'http://archive.ubuntu.com/ubuntu'
-      }[Base.host.flavour]
+      }[Babushka.host.flavour]
     end
 
     private
-    def _has? pkg_name
+
+    def has_pkg? pkg_name
       wait_for_dpkg
       status = raw_shell("dpkg -s #{pkg_name}").stdout.val_for('Status')
       status && status.split(' ').include?('installed')
+    end
+
+    def install_pkgs! pkgs, opts
+      wait_for_dpkg
+      log_shell "Downloading", "#{pkg_cmd} -y -d install #{pkgs.join(' ')}", :sudo => should_sudo?
+      super
     end
 
     def pkg_update_timeout

@@ -1,27 +1,19 @@
 # coding: utf-8
 
 module Babushka
-  module Cmdline
-    module_function
-
-    def fail_with message
-      log message if message.is_a? String
-      exit 1
-    end
-
-    module Helpers
+  class Cmdline
+    class Helpers
       extend LogHelpers
-      module_function
 
-      def print_version opts = {}
+      def self.print_version opts = {}
         if opts[:full]
-          log "Babushka v#{VERSION}, (c) 2011 Ben Hoskings <ben@hoskings.net>"
+          log "Babushka v#{VERSION} (#{Base.ref}), (c) 2012 Ben Hoskings <ben@hoskings.net>"
         else
-          log VERSION
+          log "#{VERSION} (#{Base.ref})"
         end
       end
 
-      def print_usage
+      def self.print_usage
         log "\nThe gist:"
         log "  #{Base.program_name} <command> [options]"
         log "\nAlso:"
@@ -30,14 +22,14 @@ module Babushka
         log "  #{Base.program_name} babushka        # Update babushka itself (what babushka.me/up does)"
       end
 
-      def print_handlers
+      def self.print_handlers
         log "\nCommands:"
         Handler.all.each {|handler|
           log "  #{handler.name.ljust(10)} #{handler.description}"
         }
       end
 
-      def print_examples
+      def self.print_examples
         log "\nExamples:"
         log "  # Inspect the 'system' dep (and all its sub-deps) without touching the system.".colorize('grey')
         log "  #{Base.program_name} system --dry-run"
@@ -50,12 +42,12 @@ module Babushka
         log "  #{Base.program_name} 'user setup' --debug"
       end
 
-      def print_notes
+      def self.print_notes
         log "\nCommands can be abbrev'ed, as long as they remain unique."
         log "  e.g. '#{Base.program_name} l' is short for '#{Base.program_name} list'."
       end
 
-      def search_results_for q
+      def self.search_results_for q
         YAML.load(search_webservice_for(q).body).sort_by {|i|
           -i[:runs_this_week]
         }.map {|i|
@@ -69,14 +61,14 @@ module Babushka
         }
       end
 
-      def print_search_results search_term, results
+      def self.print_search_results search_term, results
         log "The webservice knows about #{results.length} dep#{'s' unless results.length == 1} that match#{'es' if results.length == 1} '#{search_term}':"
         log ""
         Logging.log_table(
           ['Name', 'Source', 'Runs', ' ✓', 'Command'],
           results
         )
-        if (custom_sources = results.select {|r| r[1][github_autosource_regex].nil? }.count) > 0
+        if (custom_sources = results.select {|r| r[1][github_autosource_regex].nil? }.length) > 0
           log ""
           log "✣  #{custom_sources == 1 ? 'This source has a custom URI' : 'These sources have custom URIs'}, so babushka can't discover #{custom_sources == 1 ? 'it' : 'them'} automatically."
           log "   You can run #{custom_sources == 1 ? 'its' : 'their'} deps in the same way, though, once you add #{custom_sources == 1 ? 'it' : 'them'} manually:"
@@ -85,32 +77,32 @@ module Babushka
         end
       end
 
-      def github_autosource_regex
-        /^git\:\/\/github\.com\/(.*)\/babushka-deps(\.git)?/
+      def self.github_autosource_regex
+        /^\w+\:\/\/github\.com\/(.*)\/babushka-deps(\.git)?/
       end
 
-      def search_webservice_for q
+      def self.search_webservice_for q
         Net::HTTP.start('babushka.me') {|http|
           http.get URI.escape("/deps/search.yaml/#{q}")
         }
       end
 
-      def generate_list_for to_list, filter_str
+      def self.generate_list_for to_list, filter_str
         context = to_list == :deps ? Base.program_name : ':template =>'
         match_str = filter_str.try(:downcase)
         Base.sources.all_present.each {|source|
           source.load!
         }.map {|source|
-          [source, source.send(to_list).send(to_list)]
+          [source, source.send(to_list).items]
         }.map {|(source,items)|
           if match_str.nil? || source.name.downcase[match_str]
             [source, items]
           else
             [source, items.select {|item| item.name.downcase[match_str] }]
           end
-        }.select {|(source,items)|
+        }.select {|(_,items)|
           !items.empty?
-        }.sort_by {|(source,items)|
+        }.sort_by {|(source,_)|
           source.name
         }.each {|(source,items)|
           indent = (items.map {|item| "#{source.name}:#{item.name}".length }.max || 0) + 3

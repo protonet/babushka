@@ -1,12 +1,16 @@
 require 'abbrev'
 
 module Babushka
-  module Cmdline
+  class Cmdline
 
-    def handle name, description, &blk
+    def self.handle name, description, &blk
       Handler.add name, description, blk
     end
-    module_function :handle
+
+    def self.fail_with message
+      log message if message.is_a? String
+      exit 1
+    end
 
     class Handler
       def self.add name, description, opt_definer

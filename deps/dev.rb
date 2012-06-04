@@ -1,8 +1,9 @@
 dep 'build tools' do
   requires {
-    on :osx, 'xcode tools'
+    on :osx, 'xcode commandline tools'
     on :snow_leopard, 'llvm in path'
-    on :linux, 'build-essential', dep('autoconf.managed'), dep('automake.managed'), dep('libtool.managed')
+    on :yum, dep('gcc'), dep('gcc-c++'), dep('autoconf.bin'), dep('automake.bin'), dep('libtool.bin')
+    on :linux, 'build-essential', dep('autoconf.bin'), dep('automake.bin'), dep('libtool.bin')
   }
 end
 

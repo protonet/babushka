@@ -24,7 +24,14 @@ module Babushka
 
     def post_report report
       submit_report_to_webservice(report.p.read).tap {|result|
-        report.p.rm if result
+        if result
+          report.p.rm
+        else
+          # Wait for a moment before trying again, so persistent problems don't
+          # slam babushka.me (if it's rejecting the data) or peg our CPU (if
+          # the network is down).
+          sleep 1
+        end
       }
     end
 
@@ -34,7 +41,7 @@ module Babushka
         http.open_timeout = http.read_timeout = 5
         http.post '/runs.json', data
       }.is_a?(Net::HTTPSuccess)
-    rescue Errno::ECONNREFUSED, SocketError
+    rescue Errno::EADDRNOTAVAIL, Errno::ECONNREFUSED, SocketError
       log_error "Couldn't connect to the babushka webservice." unless Base.task.running?
     rescue Timeout::Error, Errno::ETIMEDOUT
       debug "Timeout while submitting run report."
