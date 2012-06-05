@@ -4,7 +4,8 @@ module Babushka
     def pkg_type; :deb end
     def pkg_cmd; "env DEBCONF_TERSE='yes' DEBIAN_PRIORITY='critical' DEBIAN_FRONTEND='noninteractive' #{pkg_binary}" end
     def pkg_binary
-      @_cached_pkg_binary ||= which('aptitude') ? 'aptitude' : 'apt-get'
+      # @_cached_pkg_binary ||= which('aptitude') ? 'aptitude' : 'apt-get'
+      @_cached_pkg_binary ||= 'apt-get'
     end
     def manager_key; :apt end
 
