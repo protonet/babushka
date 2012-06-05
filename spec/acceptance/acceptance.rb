@@ -8,7 +8,7 @@ describe "babushka" do
 
   context "basics" do
     it "should have installed babushka" do
-      @vm.run('babushka --version').should =~ /^[\d.]+ \(\w{7}\)$/
+      @vm.run('babushka --version').should =~ /^[\d.]+$/
     end
   end
 
@@ -23,11 +23,11 @@ describe "babushka" do
       @vm.babushka('benhoskings:system') # once to set the locale
       @vm.should meet('benhoskings:system')
     end
-    it "should build a recent ruby" do
-      @vm.should meet('benhoskings:ruby.src')
+    it "should build ruby 1.9" do
+      @vm.should meet('benhoskings:ruby19.src')
     end
     it "should set up nginx" do
-      @vm.should meet('benhoskings:running.nginx')
+      @vm.should meet('benhoskings:webserver running.nginx')
     end
   end
 

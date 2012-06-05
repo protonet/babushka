@@ -46,7 +46,7 @@ class Array
   # Return a new array containing every element from this array for which
   # the block returns true.
   def extract &block
-    dup.extract!(&block)
+    dup.extract! &block
   end
   # Like +extract+, but remove the extracted values in-place before
   # returning them.
@@ -63,12 +63,11 @@ class Array
   end
   # Like +squash+, but remove the +#nil?+ and +#blank?+ entries in-place.
   def squash!
-    delete_if(&:blank?)
+    delete_if &:blank?
   end
 
   # Return a new array containing the elements that match +pattern+, with
-  # +pattern+ removed (or replaced via Array#sub, if +replacement+ is
-  # supplied).
+  # +pattern+ removed.
   #
   # This is useful for selecting items from a list based on some label,
   # removing the label at the same time. A good example is finding the current
@@ -79,8 +78,8 @@ class Array
   #     topic
   # You can use +#collapse+ to retrieve the current branch like this:
   #   shell('git branch').split("\n").collapse(/\* /) #=> ["next"]
-  def collapse pattern, replacement = ''
-    grep(pattern).map {|i| i.sub pattern, replacement }
+  def collapse pattern
+    grep(pattern).map {|i| i.sub pattern, '' }
   end
 
   # Return a new array by converting each element in this array to a VersionOf.
@@ -139,11 +138,6 @@ class Array
     last.is_a?(::Hash) ? pop : {}
   end
 
-  # As above, without modifying the receiving object.
-  def extract_options
-    dup.extract_options!
-  end
-
   # Return a new array containing the terms from this array that were
   # determined to be 'similar to' +string+. A string is considered to
   # be similar to another if its Levenshtein distance is less than
@@ -162,9 +156,9 @@ class Array
       [term, Babushka::Levenshtein.distance(term, string)]
     }.select {|(i, similarity)|
       similarity <= [i.length - 2, (i.length / 5) + 2].min
-    }.sort_by {|(_, similarity)|
+    }.sort_by {|(i, similarity)|
       similarity
-    }.map {|(i, _)|
+    }.map {|(i, similarity)|
       i
     }
   end

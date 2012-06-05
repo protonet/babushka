@@ -32,55 +32,6 @@ describe Fancypath do
     end
   end
 
-  describe '#hypothetically_writable?' do
-    it "initial conditions" do
-      @file.should_not be_exists
-      @dir.should_not be_exists
-      @dir.parent.should be_exists
-      @dir.parent.should be_writable
-    end
-    it "returns true for writable paths" do
-      @file.stub!(:writable?).and_return(true)
-
-      @file.should be_hypothetically_writable
-    end
-    it "returns false for existing, nonwritable paths" do
-      @file.stub!(:exists?).and_return(true)
-      @file.stub!(:writable?).and_return(false)
-
-      @file.should_not be_hypothetically_writable
-    end
-    it "returns true for nonexistent paths when the parent is writable" do
-      @file.stub(:parent).and_return(@dir)
-      @dir.stub!(:writable?).and_return(true)
-      dir_parent = @dir.parent
-      dir_parent.stub!(:hypothetically_writable?).and_return(false)
-      @dir.stub!(:parent).and_return(dir_parent)
-
-      subfile = @file / 'subfile'
-      subfile.stub!(:parent).and_return(@file)
-
-      @file.should be_hypothetically_writable
-      subfile.should be_hypothetically_writable
-    end
-    it "returns false for nonexistent paths when the parent isn't writable" do
-      @file.stub(:parent).and_return(@dir)
-      @dir.stub!(:exists?).and_return(true)
-      @dir.stub!(:writable?).and_return(false)
-
-      subfile = @file / 'subfile'
-      subfile.stub!(:parent).and_return(@file)
-
-      @file.should_not be_hypothetically_writable
-      subfile.should_not be_hypothetically_writable
-    end
-    it "works for the root" do
-      @root = '/'.p
-      @root.stub!(:writable?).and_return(false)
-      @root.should_not be_hypothetically_writable
-    end
-  end
-
   describe '#join', 'aliased to #/' do
     it('returns a Fancypath') { (@dir/'somefile').class.should == Fancypath }
     it('joins paths') { (@dir/'somefile').to_s.should =~ /\/somefile$/ }
@@ -109,36 +60,6 @@ describe Fancypath do
     it('returns a Fancypath') { @file.remove.should be_instance_of(Fancypath) }
     it('removes file') { @file.touch.remove.should_not exist }
     it('removes directory') { @dir.create.remove.should_not exist }
-  end
-
-  describe "#grep" do
-    before {
-      @file.write("some\ncontent\ncontentedness")
-    }
-    it("returns nil when the file doesn't exist") {
-      (@dir / 'missing').grep(/test/).should be_nil
-    }
-    it('returns nil on no match') {
-      @file.grep(/test/).should be_nil
-    }
-    it('returns the matches with string parameter') {
-      @file.grep("content").should == ['content']
-    }
-    it('returns the matches with regexp parameter') {
-      @file.grep(/cont/).should == ['content', 'contentedness']
-    }
-  end
-
-  describe "#yaml" do
-    before {
-      @file.write("
-        guise:
-          seriously: guise
-      ")
-    }
-    it('returns the file contents as yaml') {
-      @file.yaml.should == {'guise' => {'seriously' => 'guise'}}
-    }
   end
 
   describe '#readlink' do
@@ -248,13 +169,13 @@ describe Fancypath do
     example 'with symbol' do
       @dir.create_dir
       %W(a.jpg b.jpg c.gif).each { |f| (@dir/f).touch }
-      @dir.select(:jpg).should =~ [@dir/'a.jpg', @dir/'b.jpg']
+      @dir.select(:jpg).should == [@dir/'a.jpg', @dir/'b.jpg']
     end
 
     example 'with glob' do
       @dir.create_dir
       %W(a.jpg b.jpg c.gif).each { |f| (@dir/f).touch }
-      @dir.select("*.jpg").should =~ [@dir/'a.jpg', @dir/'b.jpg']
+      @dir.select("*.jpg").should == [@dir/'a.jpg', @dir/'b.jpg']
     end
 
     example 'with regex' do
@@ -266,7 +187,7 @@ describe Fancypath do
     example 'with multiple args' do
       @dir.create_dir
       %W(a.jpg b.jpg c.gif).each { |f| (@dir/f).touch }
-      @dir.select(:jpg, '*.gif').should =~ [@dir/'a.jpg', @dir/'b.jpg', @dir/'c.gif']
+      @dir.select(:jpg, '*.gif').should == [@dir/'a.jpg', @dir/'b.jpg', @dir/'c.gif']
     end
 
     # todo: with block

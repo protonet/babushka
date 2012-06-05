@@ -1,15 +1,14 @@
 # coding: utf-8
 
 module Babushka
-  class Cmdline
+  module Cmdline
     extend LogHelpers
 
     handle('global', "Options that are valid for any handler") {
-      opt '-v', '--version',     "Print the current version"
-      opt '-h', '--help',        "Show this information"
-      opt '-d', '--debug',       "Show more verbose logging, and realtime shell command output"
-      opt       '--[no-]color',
-                '--[no-]colour', "Disable color in the output"
+      opt '-v', '--version',                 "Print the current version"
+      opt '-h', '--help',                    "Show this information"
+      opt '-d', '--debug',                   "Show more verbose logging, and realtime shell command output"
+      opt       '--no-color', '--no-colour', "Disable color in the output"
     }
 
     handle('help', "Print usage information").run {|cmd|
@@ -22,8 +21,8 @@ module Babushka
         log "#{cmd.argv.first.capitalize}? I have honestly never heard of that."
       else
         log "\n#{handler.name} - #{handler.description}"
-        cmd.parse(&handler.opt_definer)
-        cmd.print_usage
+        Base.cmdline.parse &handler.opt_definer
+        Base.cmdline.print_usage
       end
       log "\n"
       true
@@ -45,10 +44,9 @@ module Babushka
     handle('meet', 'The main one: run a dep and all its dependencies.') {
       opt '-n', '--dry-run',      "Discover the curent state without making any changes"
       opt '-y', '--defaults',     "Assume the default value for all vars without prompting, where possible"
-      opt '-u', '--update',       "Update referenced sources before loading deps from them"
-      opt       '--show-args',    "Show the arguments being passed between deps as they're run"
       opt       '--track-blocks', "Track deps' blocks in TextMate as they're run"
     }.run {|cmd|
+      # TODO: spec var parsing
       dep_names, vars = cmd.argv.partition {|arg| arg['='].nil? }
       if !(bad_var = vars.detect {|var| var[/^\w+=/].nil? }).nil?
         fail_with "'#{bad_var}' looks like a var but it doesn't make sense."
@@ -71,17 +69,17 @@ module Babushka
       opt '-u', '--update',       "Update all known sources"
       opt '-l', '--list',         "List dep sources"
     }.run {|cmd|
-      if cmd.opts.slice(:add, :update, :list).length != 1
+      if cmd.opts.length != 1
         fail_with "'sources' requires a single option."
-      elsif cmd.opts.has_key?(:add)
+      elsif cmd.opts.keys.first == :add
         begin
           Source.new(cmd.argv.first, :name => cmd.opts[:add]).add!
-        rescue SourceError => e
-          log_error e.message
+        rescue SourceError => ex
+          log_error ex.message
         end
-      elsif cmd.opts.has_key?(:update)
+      elsif cmd.opts.keys.first == :update
         Base.sources.update!
-      elsif cmd.opts.has_key?(:list)
+      elsif cmd.opts.keys.first == :list
         Base.sources.list!
       end
     }
@@ -117,7 +115,7 @@ module Babushka
       elsif dep.load_path.nil?
         fail_with "Can't edit '#{dep.name}, since it wasn't loaded from a file."
       else
-        file, line = dep.context.source_location
+        file, line = dep.context.file_and_line
         editor_var = ENV['BABUSHKA_EDITOR'] || ENV['VISUAL'] || ENV['EDITOR'] || which('mate') || which('vim') || which('vi')
         case editor_var
         when /^mate/

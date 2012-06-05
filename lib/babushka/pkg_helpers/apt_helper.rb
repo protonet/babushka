@@ -4,13 +4,14 @@ module Babushka
     def pkg_type; :deb end
     def pkg_cmd; "env DEBCONF_TERSE='yes' DEBIAN_PRIORITY='critical' DEBIAN_FRONTEND='noninteractive' #{pkg_binary}" end
     def pkg_binary
-      # @_cached_pkg_binary ||= which('aptitude') ? 'aptitude' : 'apt-get'
-      @_cached_pkg_binary ||= 'apt-get'
+      @_cached_pkg_binary ||= which('aptitude') ? 'aptitude' : 'apt-get'
     end
     def manager_key; :apt end
 
-    def manager_dep
-      'apt'
+    def _install! pkgs, opts
+      wait_for_dpkg
+      log_shell "Downloading", "#{pkg_cmd} -y -d install #{pkgs.join(' ')}", :sudo => should_sudo?
+      super
     end
 
     def update_pkg_lists_if_required
@@ -24,23 +25,16 @@ module Babushka
 
     def source_for_system
       {
-        :debian => 'http://ftp.debian.org/debian',
+        :debian => 'http://archive.debian.org/debian',
         :ubuntu => 'http://archive.ubuntu.com/ubuntu'
-      }[Babushka.host.flavour]
+      }[Base.host.flavour]
     end
 
     private
-
-    def has_pkg? pkg_name
+    def _has? pkg_name
       wait_for_dpkg
       status = raw_shell("dpkg -s #{pkg_name}").stdout.val_for('Status')
       status && status.split(' ').include?('installed')
-    end
-
-    def install_pkgs! pkgs, opts
-      wait_for_dpkg
-      log_shell "Downloading", "#{pkg_cmd} -y -d install #{pkgs.join(' ')}", :sudo => should_sudo?
-      super
     end
 
     def pkg_update_timeout

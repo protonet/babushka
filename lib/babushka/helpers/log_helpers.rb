@@ -2,21 +2,15 @@
 
 module Babushka
   module LogHelpers
-
-    # Make these helpers callable directly on LogHelpers,
-    # and private when included.
-    module_function
-
     # Log +message+ as an error. This is a shortcut for
     #   log(message, :as => :error)
     def log_error message, opts = {}, &block
       log message, opts.merge(:as => :error), &block
     end
 
-    # Log +message+ as a warning. This is a shortcut for
-    #   log(message, :as => :warning)
-    def log_warn message, opts = {}, &block
-      log message, opts.merge(:as => :warning), &block
+    def log_verbose message, opts = {}, &block
+      log_error "#{caller.first}: #log_verbose has been deprecated. Instead, just use #log." # deprecated
+      log message, opts, &block
     end
 
     # Yield the block, writing a note to the log about it beforehand and
@@ -56,13 +50,6 @@ module Babushka
       log message, opts.merge(:debug => !opts[:log]), &block
     end
 
-    def deprecated! date, opts = {}
-      callpoint = "#{caller[1].sub(/\:in `.*$/, '')}: " unless opts[:callpoint] == false
-      opts[:method_name] ||= "##{caller[0].scan(/`(\w+)'$/).flatten.first}"
-      log_warn "#{callpoint}#{opts[:method_name]} has been deprecated and will be removed on #{date}."
-      log_warn "  -> Use #{opts[:instead]} instead#{opts[:example] ? ", e.g. #{opts[:example]}" : '.'}" unless opts[:instead].nil?
-    end
-
     # Write +message+ to the log.
     #
     # By default, the log is written to STDOUT, and to ~/.babushka/logs/<dep_name>.
@@ -73,14 +60,13 @@ module Babushka
     # By default, the message is ended with a newline. You can pass
     # :newline => false to prevent the newline character being added.
     #
-    # To specify the message type, you can use :as. There are four custom
+    # To specify the message type, you can use :as. There are three custom
     # types supported:
-    #   :ok      The message is printed in grey with +TickChar+ prepended, as
-    #            used by +log_ok+.
-    #   :warning The message is printed in yellow, as used by +log_warn+.
-    #   :error   The message is printed in red, as used by +log_error+.
-    #   :stderr  The message (representing STDERR output) is printed in bold,
-    #            as used by +Shell+ for debug logging.
+    #   :ok     The message is printed in grey with +TickChar+ prepended, as
+    #           used by +log_ok+.
+    #   :error  The message is printed in red, as used by +log_error+.
+    #   :stderr The message (representing STDERR output) is printed in blue,
+    #           as used within the +Shell+ class for debug logging.
     #
     # If a block is given, the block is yielded with the indentation level
     # incremented. Opening and closing braces are printed to the log to represent
@@ -93,7 +79,7 @@ module Babushka
       printable = !opts[:debug] || Base.task.opt(:debug)
       Logging.print_log Logging.indentation, printable unless opts[:indentation] == false
       if block_given?
-        Logging.print_log "#{message} {".colorize('grey') + "\n", printable
+        Logging.print_log "#{message} {\n".colorize('grey'), printable
         Logging.indent! if printable
         yield.tap {|result|
           Logging.undent! if printable
@@ -103,7 +89,6 @@ module Babushka
         message = message.to_s.rstrip.gsub "\n", "\n#{Logging.indentation}"
         message = "#{Logging::TickChar.colorize('grey')} #{message}" if opts[:as] == :ok
         message = message.colorize 'red' if opts[:as] == :error
-        message = message.colorize 'yellow' if opts[:as] == :warning
         message = message.colorize 'bold' if opts[:as] == :stderr
         message = message.end_with "\n" unless opts[:newline] == false
         Logging.print_log message, printable

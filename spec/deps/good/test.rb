@@ -1,4 +1,4 @@
-meta 'test_meta_1' do
+meta 'test meta 1' do
   
 end
 

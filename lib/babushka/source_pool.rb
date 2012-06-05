@@ -4,11 +4,11 @@ module Babushka
 
     include LogHelpers
 
-    SEPARATOR = ':'
+    SOURCE_DEP_SEPARATOR = ':'
 
     def current
-      @current ||= default.concat(standard)
-      @current.dup
+      @_cached_current ||= default.concat(standard)
+      @_cached_current.dup
     end
 
     def default
@@ -24,16 +24,16 @@ module Babushka
     end
 
     def anonymous
-      @anonymous ||= Source.new(nil, :name => 'anonymous')
+      @_cached_anonymous ||= Source.new(nil, :name => 'anonymous')
     end
     def core
-      @core ||= Source.new(Path.path / 'deps', :name => 'core')
+      @_cached_core ||= Source.new(Path.path / 'deps', :name => 'core')
     end
     def current_dir
-      @current_dir ||= Source.new('./babushka-deps', :name => 'current dir')
+      @_cached_current_dir ||= Source.new('./babushka-deps', :name => 'current dir')
     end
     def personal
-      @personal ||= Source.new('~/.babushka/deps', :name => 'personal')
+      @_cached_personal ||= Source.new('~/.babushka/deps', :name => 'personal')
     end
 
     def standard
@@ -41,23 +41,18 @@ module Babushka
     end
 
     def source_for name
-      (
-        all_present.detect {|source| source.name == name } ||
-        Source.for_remote(name)
-      ).tap {|source|
-        source.load!(Base.task.opt(:update))
-      }
+      all_present.detect {|source| source.name == name } || Source.for_remote(name)
     end
 
     def dep_for dep_spec, opts = {}
       if dep_spec.is_a?(Dep)
         dep_spec
-      elsif dep_spec[/#{SEPARATOR}/] # If a source was specified, that's where we load from.
-        source_name, dep_name = dep_spec.split(SEPARATOR, 2)
+      elsif dep_spec[/#{SOURCE_DEP_SEPARATOR}/] # If a source was specified, that's where we load from.
+        source_name, dep_name = dep_spec.split(SOURCE_DEP_SEPARATOR, 2)
         source_for(source_name).find(dep_name)
-      elsif opts[:from] # Next, try opts[:from], the requiring dep's source.
+      elsif opts[:from]
         opts[:from].find(dep_spec) || dep_for(dep_spec)
-      else # Otherwise, try the standard set.
+      else # Otherwise, load from the current source (opts[:from]) or the standard set.
         matches = Base.sources.current.map {|source| source.find(dep_spec) }.flatten.compact
         if matches.length > 1
           log "Multiple sources (#{matches.map(&:dep_source).map(&:name).join(',')}) contain a dep called '#{dep_spec}'."
@@ -70,8 +65,8 @@ module Babushka
     def template_for template_spec, opts = {}
       if template_spec.nil?
         nil
-      elsif template_spec[/#{SEPARATOR}/] # If a source was specified, that's where we load from.
-        source_name, template_name = template_spec.split(SEPARATOR, 2)
+      elsif template_spec[/#{SOURCE_DEP_SEPARATOR}/] # If a source was specified, that's where we load from.
+        source_name, template_name = template_spec.split(SOURCE_DEP_SEPARATOR, 2)
         source_for(source_name).find_template(template_name)
       elsif opts[:from]
         opts[:from].find_template(template_spec) || template_for(template_spec)
@@ -103,6 +98,10 @@ module Babushka
           log ''
         }.map(&:description_pieces)
       )
+    end
+
+    def uncache!
+      current.each {|source| source.deps.uncache! }
     end
 
     def local_only?

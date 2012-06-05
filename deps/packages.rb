@@ -1,17 +1,14 @@
-dep 'curl.bin'
-
-dep 'gettext.lib'
-
-dep 'nodejs.src', :version do
-  version.default!('0.6.13')
-  source "http://nodejs.org/dist/node-v#{version}.tar.gz"
-  provides "node ~> #{version}"
+dep 'curl.managed' do
+  installs {
+    via :apt, 'curl', 'libcurl4-openssl-dev'
+    via :yum, 'curl'
+  }
 end
 
 dep 'sudo' do
   requires {
     on :osx, 'sudo.external'
-    otherwise 'sudo.bin'
+    otherwise 'sudo.managed'
   }
 end
 
@@ -22,4 +19,4 @@ dep 'sudo.external' do
   }
 end
 
-dep 'sudo.bin'
+dep 'sudo.managed'

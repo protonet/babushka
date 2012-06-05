@@ -2,33 +2,15 @@ module Babushka
   class Shell
     include LogHelpers
 
-    class ShellCommandFailed < StandardError
-      attr_reader :cmd, :stdout, :stderr
-      def initialize cmd, stdout, stderr
-        @cmd, @stdout, @stderr = cmd, stdout, stderr
-        message = if stderr.empty?
-          "Shell command failed: '#{cmd.join(' ')}'"
-        else
-          "Shell command failed: '#{cmd.join(' ')}':\n#{stderr}"
-        end
-        super message
-      end
+    attr_reader :cmd, :result, :stdout, :stderr
+
+    def initialize cmd, opts
+      raise "You can't use :spinner and :progress together in Babushka::Shell." if opts[:spinner] && opts[:progress]
+      # [*cmd] doesn't work here, becuase splatting a string splits it at newlines on 1.8.
+      @cmd, @opts = (cmd.is_a?(Array) ? cmd : [cmd]), opts
     end
 
-    attr_reader :cmd, :opts, :env, :result, :stdout, :stderr
-
-    def initialize *cmd
-      @opts = cmd.extract_options!
-      raise ArgumentError, "You can't use :spinner and :progress together in Babushka::Shell." if opts[:spinner] && opts[:progress]
-      raise ArgumentError, "wrong number of arguments (0 for 1+)" if cmd.empty?
-      @env = cmd.first.is_a?(Hash) ? cmd.shift : {}
-      @cmd = cmd
-      @progress = nil
-    end
-
-    def ok?
-      result == 0
-    end
+    def ok?; result == 0 end
 
     def run &block
       @stdout, @stderr = '', ''
@@ -39,8 +21,12 @@ module Babushka
         yield(self)
       elsif ok?
         stdout.chomp
+      elsif stderr.empty? && stdout.empty?
+        log "$ #{@cmd.join(' ')}".colorize('grey') + ' ' + "#{Logging::CrossChar} shell command failed".colorize('red')
       else
-        raise ShellCommandFailed.new(cmd, stdout, stderr)
+        log "$ #{@cmd.join(' ')}", :closing_status => 'shell command failed' do
+          log_error(stderr.empty? ? stdout : stderr)
+        end
       end
     end
 
@@ -48,7 +34,7 @@ module Babushka
 
     def invoke
       debug "$ #{@cmd.join(' ')}".colorize('grey')
-      Babushka::Open3.popen3 @cmd, popen_opts do |stdin,stdout,stderr,thread|
+      Babushka::Open3.popen3 @cmd do |stdin,stdout,stderr|
         unless @opts[:input].nil?
           stdin << @opts[:input]
           stdin.close
@@ -84,8 +70,7 @@ module Babushka
     def read_from io, buf, log_as = nil
       while !io.closed? && io.ready_for_read?
         output = nil
-        # Try reading less than a full line (up to just a backspace) if we're
-        # looking for progress output.
+        # Only try reading up to a backspace if we're looking for progress output.
         output = io.gets("\r") if @opts[:progress]
         output = io.gets if output.nil?
 
@@ -100,13 +85,6 @@ module Babushka
           yield if block_given?
         end
       end
-    end
-
-    def popen_opts
-      {}.tap {|opts|
-        opts[:chdir] = @opts[:cd].p.to_s if @opts[:cd]
-        opts[:env] = @env if @env
-      }
     end
   end
 end

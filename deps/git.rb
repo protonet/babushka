@@ -1,38 +1,27 @@
 dep 'git' do
-  requires_when_unmet {
+  requires {
     # Use the binary installer on OS X, so installing babushka
     # (which pulls in git) doesn't require a compiler.
     on :osx, 'git.installer'
-    # git-1.5 can't clone https:// repos properly. Let's build
-    # our own rather than monkeying with unstable debs.
-    on :lenny, 'git.src'
-    otherwise 'git.bin'
+    otherwise 'git.managed'
   }
-  met? { in_path? 'git >= 1.6' }
+  met? { in_path? 'git >= 1.5' }
 end
 
-dep 'git.bin' do
+dep 'git.managed' do
   installs {
     via :macports, 'git-core +svn +bash_completion'
     via :apt, 'git-core'
-    via :binpkgsrc, 'scmgit'
     otherwise 'git'
   }
 end
 
-dep 'git.installer', :version do
-  version.default!('1.7.10.1')
-  source "http://git-osx-installer.googlecode.com/files/git-#{version}-intel-universal-snow-leopard.dmg"
-  provides "git >= #{version}"
+dep 'git.installer' do
+  requires_when_unmet 'usr-local.install_path'
+  source "http://git-osx-installer.googlecode.com/files/git-1.7.5.4-x86_64-leopard.dmg"
   after {
-    cd '/usr/local/bin', :create => true, :sudo => true do
+    cd '/usr/local/bin' do
       sudo "ln -sf /usr/local/git/bin/git* ."
     end
   }
-end
-
-dep 'git.src', :version do
-  version.default!('1.7.9.4')
-  requires 'gettext.lib'
-  source "http://git-core.googlecode.com/files/git-#{version}.tar.gz"
 end

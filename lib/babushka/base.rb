@@ -1,17 +1,4 @@
 module Babushka
-
-  # +host+ is an instance of Babushka::SystemProfile for the system the command
-  # was invoked on.
-  # If the current system isn't supported, SystemProfile.for_host will return
-  # +nil+, and Base.run will fail early. If the system is known but the
-  # flavour isn't (e.g. an unknown Linux variant), a generic SystemProfile
-  # will be used, which should work for most operations but will fail on deps
-  # that attempt to use the package manager, etc.
-  def host
-    @host ||= Babushka::SystemProfile.for_host
-  end
-  module_function :host
-
   class Base
   class << self
 
@@ -30,10 +17,11 @@ module Babushka
       @cmdline ||= Cmdline::Parser.for(ARGV)
     end
 
-    # deprecated
+    # +host+ is an instance of Babushka::SystemProfile for the system the command
+    # was invoked on. If the current system isn't supported, SystemProfile.for_host
+    # will return +nil+, and Base.run will fail early.
     def host
-      Babushka::LogHelpers.deprecated! "2012-04-01", :method_name => 'Babushka::Base.host', :instead => "Babushka.host"
-      Babushka.host
+      @host ||= Babushka::SystemProfile.for_host
     end
 
     # +sources+ is an instance of Babushka::SourcePool, contains all the
@@ -57,12 +45,12 @@ module Babushka
     end
 
     # The top-level entry point for babushka runs invoked at the command line.
-    # When the `babushka` command is run, bin/babushka.rb first triggers a load
+    # When the `babushka` command is run, bin/babushka first triggers a load
     # via lib/babushka.rb, and then calls this method.
     def run
       cmdline.run
     ensure
-      threads.each(&:join)
+      threads.each &:join
     end
 
     def exit_on_interrupt!
@@ -71,15 +59,11 @@ module Babushka
         trap("INT") {
           system "stty", stty_save
           unless Base.task.callstack.empty?
-            puts "\n#{Logging.closing_log_message("#{Base.task.callstack.first.contextual_name} (cancelled)", false, :closing_status => true)}"
+            puts "\n#{closing_log_message("#{Base.task.callstack.first.contextual_name} (cancelled)", false, :closing_status => true)}"
           end
-          exit false
+          exit
         }
       end
-    end
-
-    def ref
-      @ref ||= GitRepo.new(Path.path).current_head if (Path.path / '.git').dir?
     end
 
     def program_name

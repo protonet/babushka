@@ -4,16 +4,15 @@ dep 'ruby' do
   }
   requires_when_unmet {
     on :osx, 'ruby.external'
-    otherwise 'ruby.bin'
+    otherwise 'ruby.managed'
   }
 end
 
-dep 'ruby.bin' do
+dep 'ruby.managed' do
   installs {
-    via [:lenny, :hardy, :lucid], %w[ruby irb ruby1.8-dev libopenssl-ruby]
-    via :apt, %w[ruby ruby1.8-dev]
+    via :maverick, %w[ruby ruby1.8-dev]
+    via :apt, %w[ruby irb ruby1.8-dev libopenssl-ruby]
     via :yum, %w[ruby ruby-irb]
-    otherwise 'ruby'
   }
   provides %w[ruby irb]
 end

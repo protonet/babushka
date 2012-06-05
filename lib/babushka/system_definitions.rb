@@ -20,8 +20,7 @@ module Babushka
             '10.3' => :panther,
             '10.4' => :tiger,
             '10.5' => :leopard,
-            '10.6' => :snow_leopard,
-            '10.7' => :lion
+            '10.6' => :snow_leopard
           }
         },
         :linux => {
@@ -39,9 +38,7 @@ module Babushka
             '9.10'  => :karmic,
             '10.04' => :lucid,
             '10.10' => :maverick,
-            '11.04' => :natty,
-            '11.10' => :oneiric,
-            '12.04' => :precise
+            '11.04' => :natty
           },
           :debian => {
             '4.0' => :etch,
@@ -49,10 +46,6 @@ module Babushka
             '6.0' => :squeeze,
             '7.0' => :wheezy
           }
-        },
-        :bsd => {
-          :dragonfly => {},
-          :freebsd => {}
         }
       }
     end
@@ -64,8 +57,7 @@ module Babushka
             '10.3' => 'Panther',
             '10.4' => 'Tiger',
             '10.5' => 'Leopard',
-            '10.6' => 'Snow Leopard',
-            '10.7' => 'Lion'
+            '10.6' => 'Snow Leopard'
           }
         },
         :linux => {
@@ -83,17 +75,11 @@ module Babushka
             '9.10'  => 'Karmic Koala',
             '10.04' => 'Lucid Lynx',
             '10.10' => 'Maverick Meerkat',
-            '11.04' => 'Natty Narwhal',
-            '11.10' => 'Oneiric Ocelot',
-            '12.04' => 'Precise Pangolin'
+            '11.04' => 'Natty Narwhal'
           },
           :debian => {
             '5.0.4' => 'Lenny'
           }
-        },
-        :bsd => {
-          :dragonfly => {},
-          :freebsd => {}
         }
       }
     end

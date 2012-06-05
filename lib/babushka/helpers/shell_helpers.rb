@@ -1,7 +1,5 @@
 module Babushka
   module ShellHelpers
-    include LogHelpers
-
     # Run +cmd+.
     #
     # If the command succeeds (i.e. returns 0), its output will be returned
@@ -37,18 +35,23 @@ module Babushka
     #     is printed to stdout, and advanced whenever a line is read on the
     #     command's stdout or stderr pipes. This is useful for monitoring the
     #     progress of a long-running command, like a build or an installer.
-    def shell *cmd, &block
-      shell!(*cmd, &block)
-    rescue Shell::ShellCommandFailed => e
-      if cmd.extract_options[:log]
-        # Don't log the error if the command already logged
-      elsif e.stdout.empty? && e.stderr.empty?
-        log "$ #{e.cmd.join(' ')}".colorize('grey') + ' ' + "#{Logging::CrossChar} shell command failed".colorize('red')
-      else
-        log "$ #{e.cmd.join(' ')}", :closing_status => 'shell command failed' do
-          log_error(e.stderr.empty? ? e.stdout : e.stderr)
-        end
+    def shell cmd, opts = {}, &block
+      if opts[:dir] # deprecated
+        log_error "#{caller.first}: #shell's :dir option has been renamed to :cd."
+        opts[:cd] = opts[:dir]
       end
+      if opts[:cd]
+        if !opts[:cd].p.exists?
+          if opts[:create]
+            opts[:cd].p.mkdir
+          else
+            raise Errno::ENOENT, opts[:cd]
+          end
+        end
+        cmd = "cd \"#{opts[:cd].p.to_s.gsub('"', '\"')}\" && #{cmd}"
+      end
+      shell_method = (opts[:as] || opts[:sudo]) ? :sudo : :shell_cmd
+      send shell_method, cmd, opts, &block
     end
 
     # Run +cmd+, returning true if its exit code was 0.
@@ -59,29 +62,8 @@ module Babushka
     #
     # The idea is that +#shell+ is for when you're interested in the command's
     # output, and +#shell?+ is for when you're interested in the exit status.
-    def shell? *cmd
-      shell(*cmd) {|s| s.stdout.chomp if s.ok? }
-    end
-
-    # Run +cmd+ via #shell, raising an exception if it doesn't exit
-    # with success.
-    def shell! *cmd, &block
-      opts = cmd.extract_options!
-      cmd = cmd.first if cmd.map(&:class) == [Array]
-
-      if opts[:cd]
-        if !opts[:cd].p.exists?
-          if opts[:create]
-            opts[:cd].p.mkdir
-          else
-            raise Errno::ENOENT, opts[:cd]
-          end
-        elsif !opts[:cd].p.dir?
-          raise Errno::ENOTDIR, opts[:cd]
-        end
-      end
-      shell_method = (opts[:as] || opts[:sudo]) ? :sudo : :shell_cmd
-      send shell_method, *cmd.dup.push(opts), &block
+    def shell? cmd, opts = {}
+      shell(cmd, opts) {|s| s.ok? }
     end
 
     # This method is a shortcut for accessing the results of a shell command
@@ -91,8 +73,13 @@ module Babushka
     #   shell('grep rails Gemfile') {|shell| shell.stdout }.empty?
     # can be simplified to this:
     #   raw_shell('grep rails Gemfile').stdout.empty?
-    def raw_shell *cmd
-      shell(*cmd) {|s| s }
+    def raw_shell cmd, opts = {}
+      shell(cmd, opts) {|s| s }
+    end
+
+    def failable_shell cmd, opts = {}
+      log_error "#failable_shell has been renamed to #raw_shell." # deprecated
+      raw_shell cmd, opts
     end
 
     # Run +cmd+ in a separate interactive shell. This is useful for running
@@ -100,16 +87,16 @@ module Babushka
     # this run, like changing the user's shell. It's also useful for running
     # commands that are only valid on an interactive shell, like rvm-related
     # commands.
+    # TODO: specs.
     def login_shell cmd, opts = {}, &block
       if shell('echo $SHELL').p.basename == 'zsh'
-        shell "zsh -i -c '#{cmd}'", opts, &block
+        shell %Q{zsh -i -c "#{cmd.gsub('"', '\"')}"}, opts, &block
       else
-        shell "bash -l -c '#{cmd}'", opts, &block
+        shell %Q{bash -l -c "#{cmd.gsub('"', '\"')}"}, opts, &block
       end
     end
 
-    # Run +cmd+ via `sudo`, bypassing it if possible (i.e. if we're running as
-    # root already, or as the user that was requested).
+    # Run +cmd+ via sudo.
     #
     # The return behaviour and block handling of +#sudo+ are identical to that
     # of +#shell+. In fact, +#sudo+ constructs a sudo command, and then uses
@@ -128,27 +115,15 @@ module Babushka
     # is equivalent to these two shell calls:
     #   shell('ls', :sudo => 'ben')
     #   shell('ls', :as => 'ben')
-    def sudo *cmd, &block
-      opts = cmd.extract_options!
-      env = cmd.first.is_a?(Hash) ? cmd.shift : {}
-
-      if cmd.map(&:class) != [String]
-        raise ArgumentError, "#sudo commands have to be passed as a single string, not splatted strings or an array, since the `sudo` is composed from strings."
-      end
-
-      raw_as = opts[:as] || opts[:sudo] || 'root'
-      as = raw_as == true ? 'root' : raw_as
-      cmd = cmd.last
-
-      sudo_cmd = if current_username == as
-        cmd # Don't sudo if we're already running as the specified user.
-      elsif opts[:su] || cmd[' |'] || cmd[' >']
-        "sudo su - #{as} -c \"#{cmd.gsub('"', '\"')}\""
+    def sudo cmd, opts = {}, &block
+      cmd = cmd.to_s
+      opts[:as] ||= opts[:sudo] if opts[:sudo].is_a?(String)
+      sudo_cmd = if opts[:su] || cmd[' |'] || cmd[' >']
+        "sudo su - #{opts[:as] || 'root'} -c \"#{cmd.gsub('"', '\"')}\""
       else
-        "sudo -u #{as} #{cmd}"
+        "sudo -u #{opts[:as] || 'root'} #{cmd}"
       end
-
-      shell [env, sudo_cmd], opts.discard(:as, :sudo, :su), &block
+      shell sudo_cmd, opts.discard(:as, :sudo), &block
     end
 
     # This method returns the full path to the specified command in the PATH,
@@ -160,7 +135,7 @@ module Babushka
     #   which('babushka') #=> nil
     #
     # This is roughly equivalent to using `which` or `type` on the shell.
-    # However, because those commands' behaviour and output vary across
+    # However, because those commands' behaviour and ouptut vary across
     # platforms and shells, we instead use the logic in #cmd_dir.
     def which cmd_name
       matching_dir = cmd_dir(cmd_name)
@@ -199,22 +174,16 @@ module Babushka
     # output is emitted by the command. Once the command terminates, the log
     # would be completed to show
     #   Sleeping for a bit... done.
-    def log_shell message, *cmd, &block
-      opts = cmd.extract_options!
+    def log_shell message, cmd, opts = {}, &block
       log_block message do
-        shell *cmd.dup.push(opts.merge(:spinner => true)), &block
+        shell cmd, opts.merge(:spinner => true), &block
       end
     end
 
     private
 
-    def shell_cmd *cmd, &block
-      Shell.new(*cmd).run(&block)
-    end
-
-    def current_username
-      require 'etc'
-      Etc.getpwuid(Process.euid).name
+    def shell_cmd cmd, opts = {}, &block
+      Shell.new(cmd, opts).run(&block)
     end
   end
 end

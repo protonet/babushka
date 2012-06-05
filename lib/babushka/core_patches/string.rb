@@ -1,17 +1,4 @@
 class String
-  # Return a Dep::Requirement that specifies the dep that should later be
-  # called, and the arguments that should be passed. This allows requiring
-  # deps with a less noisy syntax, and the lookup is lazy (it happens at
-  # the point the dep is invoked, from its parent dep in
-  # Dep#process_requirements).
-  #
-  #   dep 'user has a password', :username do
-  #     requires 'user exists'.with(username)
-  #   end
-  def with *args
-    Babushka::Dep::Requirement.new(self, args)
-  end
-
   # Returns true iff +other+ appears exactly at the start of +self+.
   def starts_with? other
     self[0, other.length] == other
@@ -65,12 +52,10 @@ class String
   #   'key with spaces: space-separated value'.val_for('key with spaces') #=> 'space-separated value'
   def val_for key
     split("\n").grep(
-      # The key we're after, maybe preceded by non-word chars and spaces, and
-      # followed either by a word/non-word boundary or whitespace.
-      key.is_a?(Regexp) ? key : /(^|^[^\w]*\s+)#{Regexp.escape(key)}(\b|(?=\s))/
+      key.is_a?(Regexp) ? key : /(^|^[^\w]*\s+)#{Regexp.escape(key)}\b/
     ).map {|l|
       l.sub(/^[^\w]*\s+/, '').
-        sub(key.is_a?(Regexp) ? key : /^#{Regexp.escape(key)}(\b|(?=\s))\s*[:=]?/, '').
+        sub(key.is_a?(Regexp) ? key : /^#{Regexp.escape(key)}\b\s*[:=]?/, '').
         sub(/[;,]\s*$/, '').
         strip
     }.first
@@ -111,7 +96,7 @@ class String
 
   # Remove all color-related escape sequences from this string in-place.
   def decolorize!
-    gsub!(/\e\[\d+[;\d]*m/, '')
+    gsub! /\e\[\d+[;\d]*m/, ''
     self
   end
 end

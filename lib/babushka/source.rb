@@ -9,7 +9,7 @@ module Babushka
     include PathHelpers
     extend PathHelpers
 
-    attr_reader :name, :uri, :deps, :templates
+    attr_reader :name, :uri, :repo, :type, :deps, :templates
 
     def self.present
       source_prefix.glob('*').map(&:p).select {|path|
@@ -22,33 +22,37 @@ module Babushka
     end
 
     def self.for_path path
-      @sources ||= {}
-      @sources[default_name_for_uri(path)] ||= begin
-        remote = shell "git config remote.origin.url", :cd => path
+      path = path.p
+      if !path.directory?
+        raise ArgumentError, "The path #{path} isn't a directory."
+      else
+        remote = cd(path) { shell "git config remote.origin.url" }
         if remote.nil?
           Source.new path # local source
         else
-          Source.new remote, :name => default_name_for_uri(path) # remote source with custom path
+          Source.new remote, :name => path.basename # remote source with custom path
         end
       end
     end
 
     def self.for_remote name
-      Source.new(default_remote_for(name), :name => name)
+      Source.new(default_remote_for(name, :github), :name => name)
     end
 
-    def self.default_remote_for name
-      "https://github.com/#{name}/babushka-deps.git"
+    def self.default_remote_for name, from
+      {
+        :github => "git://github.com/#{name}/babushka-deps.git"
+      }[from]
     end
 
     require 'uri'
     def self.discover_uri_and_type path
       if path.nil?
         [nil, :implicit]
-      elsif path.to_s.sub(/^\w+:\/\//, '')[/^[^\/]+[@:]/]
-        [path.to_s, :private]
-      elsif path.to_s[/^(git|https?|file):\/\//]
+      elsif path.to_s[/^(git|http|file):\/\//]
         [path.to_s, :public]
+      elsif path.to_s[/^(\w+@)?[a-zA-Z0-9.\-]+:/]
+        [path.to_s, :private]
       else
         [path.p, :local]
       end
@@ -67,8 +71,7 @@ module Babushka
       @uri, @type = self.class.discover_uri_and_type(path)
       @name = (opts[:name] || self.class.default_name_for_uri(@uri)).to_s
       @deps = DepPool.new self
-      @templates = DepPool.new self
-      @loaded = @currently_loading = false
+      @templates = MetaDepPool.new self
     end
 
     def uri_matches? path
@@ -118,7 +121,7 @@ module Babushka
       [:public, :private].include? type
     end
     def cloned?
-      cloneable? && File.directory?(path / '.git')
+      File.directory? path / '.git'
     end
     def present?
       cloneable? ? cloned? : path.exists?
@@ -148,13 +151,10 @@ module Babushka
       end
     end
 
-    def load! should_update = false
+    def load!
       unless @currently_loading
         @currently_loading = true
-        if !@loaded && cloned? && !should_update
-          log "Behaviour change: not updating '#{name}'. To update sources as they're loaded, use the new '--update' option.".colorize('on grey')
-        end
-        update! if cloneable? && (!cloned? || should_update)
+        update! if cloneable?
         load_deps! unless implicit? # implicit sources can't be loaded.
         @currently_loading = false
       end
@@ -166,16 +166,26 @@ module Babushka
           Base.sources.load_context :source => self, :path => f do
             begin
               load f
-            rescue StandardError => e
+            rescue Exception => e
               log_error "#{e.backtrace.first}: #{e.message}"
               log "Check #{(e.backtrace.detect {|l| l[f] } || f).sub(/\:in [^:]+$/, '')}."
               debug e.backtrace * "\n"
             end
           end
         }
-        debug "Loaded #{deps.count} deps from #{path}." unless deps.count.zero?
+        debug "Loaded #{deps.count}#{" and skipped #{deps.skipped_count}" unless deps.skipped_count.zero?} deps from #{path}." unless deps.count.zero?
         @loaded = true
       end
+    end
+
+    def define_deps!
+      Base.sources.load_context :source => self do
+        deps.define_deps!
+      end
+    end
+
+    def inspect
+      "#<Babushka::Source @name=#{name.inspect}, @type=#{type.inspect}, @uri=#{uri.inspect}, @deps.count=#{deps.count}>"
     end
 
     def update!
@@ -190,7 +200,6 @@ module Babushka
       elsif repo.exists? && repo.dirty?
         log "Not updating #{name} (#{path}) because there are local changes."
       elsif repo.exists? && repo.ahead?
-        @updated = false # So the ahead? check doesn't run again, for when there's no network.
         log "Not updating #{name} (#{path}) because it's ahead of origin."
       else
         git(uri, :to => path, :log => true).tap {|result|

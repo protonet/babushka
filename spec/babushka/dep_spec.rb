@@ -1,81 +1,71 @@
-# coding: utf-8
 require 'spec_helper'
 require 'dep_support'
 
 describe "Dep.new" do
   it "should reject deps with empty names" do
     L{
-      Dep.new "", Base.sources.anonymous, [], {}, nil
-    }.should raise_error(InvalidDepName, "Deps can't have empty names.")
+      Dep.new "", Base.sources.anonymous, {}, nil
+    }.should raise_error(DepError, "Deps can't have empty names.")
     Dep("carriage\rreturn").should be_nil
   end
   it "should reject deps with nonprintable characters in their names" do
     L{
-      Dep.new "carriage\rreturn", Base.sources.anonymous, [], {}, nil
-    }.should raise_error(InvalidDepName, "The dep name 'carriage\rreturn' contains nonprintable characters.")
+      Dep.new "carriage\rreturn", Base.sources.anonymous, {}, nil
+    }.should raise_error(DepError, "The dep name 'carriage\rreturn' contains nonprintable characters.")
     Dep("carriage\rreturn").should be_nil
-  end
-  it "should allow deps with unicode characters in their names" do
-    L{
-      Dep.new "☕script", Base.sources.anonymous, [], {}, nil
-    }.should_not raise_error
-    Dep("☕script").should be_an_instance_of(Dep)
   end
   it "should reject deps slashes in their names" do
     L{
-      Dep.new "slashes/invalidate names", Base.sources.anonymous, [], {}, nil
-    }.should raise_error(InvalidDepName, "The dep name 'slashes/invalidate names' contains '/', which isn't allowed (logs are named after deps, and filenames can't contain '/').")
+      Dep.new "slashes/invalidate names", Base.sources.anonymous, {}, nil
+    }.should raise_error(DepError, "The dep name 'slashes/invalidate names' contains '/', which isn't allowed (logs are named after deps, and filenames can't contain '/').")
     Dep("slashes/invalidate names").should be_nil
   end
   it "should reject deps colons in their names" do
     L{
-      Dep.new "colons:invalidate names", Base.sources.anonymous, [], {}, nil
-    }.should raise_error(InvalidDepName, "The dep name 'colons:invalidate names' contains ':', which isn't allowed (colons separate dep and template names from source prefixes).")
+      Dep.new "colons:invalidate names", Base.sources.anonymous, {}, nil
+    }.should raise_error(DepError, "The dep name 'colons:invalidate names' contains ':', which isn't allowed (colons separate dep and template names from source prefixes).")
     Dep("colons:invalidate names").should be_nil
   end
   it "should create deps with valid names" do
     L{
-      Dep.new("valid dep name", Base.sources.anonymous, [], {}, nil)
+      Dep.new("valid dep name", Base.sources.anonymous, {}, nil)
     }.should change(Base.sources.anonymous.deps, :count).by(1)
     Dep("valid dep name").should be_an_instance_of(Dep)
   end
-  it "should store the params" do
-    L{
-      Dep.new("valid dep with params", Base.sources.anonymous, [:some, :params], {}, nil)
-    }.should change(Base.sources.anonymous.deps, :count).by(1)
-    Dep("valid dep with params").params.should == [:some, :params]
-  end
   context "without template" do
     before {
-      @dep = Dep.new("valid base dep", Base.sources.anonymous, [], {}, nil)
+      @dep = Dep.new("valid base dep", Base.sources.anonymous, {}, nil)
     }
     it "should work" do
       @dep.should be_an_instance_of(Dep)
       @dep.template.should == Dep::BaseTemplate
     end
   end
-  context "with a missing template" do
+  context "with template" do
     it "should fail to define optioned deps against a missing template" do
       L{
-        Dep.new("valid but missing template", Base.sources.anonymous, [], {:template => 'template'}, nil).template
-      }.should raise_error(TemplateNotFound, "There is no template named 'template' to define 'valid but missing template' against.")
+        Dep.new("valid but missing template", Base.sources.anonymous, {:template => 'template'}, nil).template
+      }.should raise_error(DepError, "There is no template named 'template' to define 'valid but missing template' against.")
     end
-  end
-  context "with template" do
-    before {
-      @meta = meta('template')
-    }
-    it "should work when passed as an option" do
-      Dep.new("valid option dep", Base.sources.anonymous, [], {:template => 'template'}, nil).tap {|dep|
-        dep.should be_an_instance_of(Dep)
-        dep.template.should == @meta
+    context "with template from options" do
+      before {
+        @meta = meta('option template')
+        @dep = Dep.new("valid option dep", Base.sources.anonymous, {:template => 'option template'}, nil)
       }
+      it "should work" do
+        @dep.should be_an_instance_of(Dep)
+        @dep.template.should == @meta
+      end
     end
-    it "should work when passed as a suffix" do
-      Dep.new("valid dep name.template", Base.sources.anonymous, [], {}, nil).tap {|dep|
-        dep.should be_an_instance_of(Dep)
-        dep.template.should == @meta
+    context "with template from suffix" do
+      before {
+        @meta = meta('.suffix_template')
+        @dep = Dep.new("valid dep name.suffix_template", Base.sources.anonymous, {}, nil)
       }
+      it "should work" do
+        @dep.should be_an_instance_of(Dep)
+        @dep.template.should == @meta
+      end
     end
     after { Base.sources.anonymous.templates.clear! }
   end
@@ -90,7 +80,7 @@ describe Dep, '.find_or_suggest' do
   end
   context "namespaced" do
     before {
-      Prompt.stub!(:suggest_value_for).and_return(nil)
+      Dep.stub!(:suggest_value_for).and_return(nil)
       @source = Source.new(nil, :name => 'namespaced')
       Source.stub!(:present).and_return([@source])
       Base.sources.load_context :source => @source do
@@ -125,7 +115,7 @@ describe Dep, '.find_or_suggest' do
         @sub_dep = dep 'Dep.find_or_suggest sub-dep'
       }
       it "should find the sub dep" do
-        @sub_dep.should_receive :process!
+        @sub_dep.should_receive :process
         @namespaced_dep.process
       end
     end
@@ -136,7 +126,7 @@ describe Dep, '.find_or_suggest' do
         end
       }
       it "should find the sub dep" do
-        @sub_dep.should_receive :process!
+        @sub_dep.should_receive :process
         @namespaced_dep.process
       end
     end
@@ -192,39 +182,58 @@ describe "dep creation" do
   after { Base.sources.anonymous.deps.clear! }
 
   context "without template" do
+    before { dep 'without template' }
     it "should use the base template" do
-      dep('without template').template.should == Dep::BaseTemplate
+      Dep('without template').template.should == Dep::BaseTemplate
     end
   end
-  context "with template" do
+  context "with option template" do
     before {
-      @template = meta 'template'
+      @template = meta 'option template'
     }
-    it "should use the template when passed as an option" do
-      dep('with template', :template => 'template').tap {|dep|
-        dep.template.should == @template
-        dep.should_not be_suffixed
-        dep.suffix.should be_nil
-      }
+    it "should use the specified template as an option" do
+      dep('with option template', :template => 'option template').template.should == @template
     end
-    it "should use the template and be suffixed when passed as a suffix" do
-      dep('with template.template').tap {|dep|
-        dep.template.should == @template
-        dep.should be_suffixed
-        dep.suffix.should == 'template'
-      }
+    it "should not recognise the template as a suffix" do
+      dep('with option template.option template').template.should == Dep::BaseTemplate
     end
-    context "when both are passed" do
+  end
+  context "with suffix template" do
+    before {
+      @template = meta '.suffix_template'
+    }
+    context "as option template" do
       before {
-        @another_template = meta 'another_template'
+        @dep = dep('with suffix template', :template => 'suffix_template')
       }
-      it "should use the option template" do
-        dep('with both templates.template', :template => 'another_template').tap {|dep|
-          dep.template.should == @another_template
-          dep.should_not be_suffixed
-          dep.suffix.should == 'template'
-        }
+      it "should use the specified template as an option" do
+        @dep.template.should == @template
       end
+      it "should not be suffixed" do
+        @dep.should_not be_suffixed
+        @dep.suffix.should be_nil
+      end
+    end
+    context "as suffix template" do
+      before {
+        @dep = dep('with suffix template.suffix_template')
+      }
+      it "should use the specified template as a suffix" do
+        @dep.template.should == @template
+      end
+      it "should not be suffixed" do
+        @dep.should be_suffixed
+        @dep.suffix.should == 'suffix_template'
+      end
+    end
+  end
+  context "with both templates" do
+    before {
+      meta '.suffix_template'
+      @template = meta 'option template'
+    }
+    it "should use the option template" do
+      dep('with both templates.suffix_template', :template => 'option template').template.should == @template
     end
   end
   after { Base.sources.anonymous.templates.clear! }
@@ -235,38 +244,27 @@ describe Dep, "defining" do
     Base.sources.stub!(:current_real_load_source).and_return(Base.sources.anonymous)
   }
   it "should not define the dep when called without a block" do
-    dep('lazy defining test').context.should_not be_loaded
+    dep('lazy defining test').dep_defined?.should == nil
   end
   it "should not define the dep when called with a block" do
     dep('lazy defining test with block') do
       requires 'another dep'
-    end.context.should_not be_loaded
+    end.dep_defined?.should == nil
   end
   context "after running" do
     it "should be defined" do
       dep('lazy defining test with run').tap {|dep|
         dep.met?
-      }.context.should be_loaded
+      }.dep_defined?.should == true
     end
     context "with a template" do
       let!(:template) { meta 'lazy_defining_template' }
       it "should use the template" do
         dep('lazy defining test with template.lazy_defining_template').tap {|dep|
           dep.met?
-        }.template.should == template
+          dep.template.should == template
+        }
       end
-    end
-  end
-  context "with params" do
-    it "should run against subsequent parameters" do
-      parameter = Parameter.new(:arg)
-      dep('parameter preserving', :arg) {
-        arg.default!('a default value')
-      }.tap {|dep|
-        dep.met?('some other value')
-        dep.met?(parameter)
-      }
-      parameter.description.should == 'arg: [default!: "a default value"]'
     end
   end
   context "with errors" do
@@ -277,27 +275,42 @@ describe Dep, "defining" do
       dep('lazy defining test with errors') do
         nonexistent_method
       end.tap {|dep|
-        dep.context.should_not be_loaded
+        dep.dep_defined?.should == nil
         dep.met?
-      }.context.should be_failed
+      }.dep_defined?.should == false
     end
-    it "should not attempt to run" do
-      dep('lazy defining test with errors') do
-        nonexistent_method
-      end.tap {|dep|
-        dep.should_not_receive(:process_deps)
-        dep.should_not_receive(:process_self)
-      }.met?
-    end
-    it "should not attempt to run later" do
-      dep('lazy defining test with errors') do
-        nonexistent_method
-      end.tap {|dep|
+  end
+  context "repeatedly" do
+    it "should only ever define the dep once" do
+      dep('lazy defining test with repetition').tap {|dep|
         dep.met?
-        dep.should_not_receive(:process_deps)
-        dep.should_not_receive(:process_self)
-      }.met?
+        dep.context.should_receive(:define!).never
+        dep.met?
+      }
     end
+    it "should not overwrite custom blocks" do
+      dep('lazy defining test with block overwriting') do
+        setup { true }
+      end.tap {|dep|
+        dep.define!
+        dep.context.setup { 'custom' }
+        dep.define!
+        dep.send(:process_task, :setup).should == 'custom'
+      }
+    end
+  end
+end
+
+describe Dep, "undefining" do
+  it "should undefine the dep" do
+    dep('undefining').tap {|dep|
+      dep.define!
+      old_context = dep.context
+      dep.dep_defined?.should be_true
+      dep.undefine_dep!
+      dep.dep_defined?.should be_false
+      dep.context.should_not == old_context
+    }
   end
 end
 
@@ -313,146 +326,44 @@ describe Dep, '#basename' do
     end
   end
   context "for option-templated deps" do
-    before { meta 'basename_template' }
+    before { meta 'basename template' }
     it "should be the same as the dep's name" do
-      dep('basename test', :template => 'basename_template').basename.should == 'basename test'
+      dep('basename test', :template => 'basename template').basename.should == 'basename test'
     end
     context "with a suffix" do
       it "should be the same as the dep's name" do
-        dep('basename test.basename_template', :template => 'basename_template').basename.should == 'basename test.basename_template'
+        dep('basename test.basename template', :template => 'basename template').basename.should == 'basename test.basename template'
       end
     end
-    after {
-      Base.sources.anonymous.deps.clear!
-      Base.sources.anonymous.templates.clear!
-    }
+    after { Base.sources.anonymous.templates.clear! }
   end
   context "for suffix-templated deps" do
     before { meta 'basename_template' }
     it "should remove the suffix name" do
       dep('basename test.basename_template').basename.should == 'basename test'
     end
-    after {
-      Base.sources.anonymous.deps.clear!
-      Base.sources.anonymous.templates.clear!
-    }
-  end
-end
-
-describe Dep, '#cache_key' do
-  it "should work for parameterless deps" do
-    dep('cache key, no params').cache_key.should == Dep::Requirement.new('cache key, no params', [])
-  end
-  it "should work for parameterised deps with no args" do
-    dep('cache key, no args', :arg1, :arg2).cache_key.should == Dep::Requirement.new('cache key, no args', [nil, nil])
-  end
-  it "should work for parameterised deps with named args" do
-    dep('cache key, named args', :arg1, :arg2).with(:arg2 => 'value').cache_key.should == Dep::Requirement.new('cache key, named args', [nil, 'value'])
-  end
-  it "should work for parameterised deps positional args" do
-    dep('cache key, positional args', :arg1, :arg2).with('value', 'another').cache_key.should == Dep::Requirement.new('cache key, positional args', ['value', 'another'])
-  end
-end
-
-describe Dep, "params" do
-  describe "non-symbol params" do
-    it "should be rejected, singular" do
-      L{
-        dep('non-symbol param', 'a')
-      }.should raise_error(DepParameterError, %{The dep 'non-symbol param' has a non-symbol param "a", which isn't allowed.})
-    end
-    it "should be rejected, plural" do
-      L{
-        dep('non-symbol params', 'a', 'b')
-      }.should raise_error(DepParameterError, %{The dep 'non-symbol params' has non-symbol params "a" and "b", which aren't allowed.})
-    end
-  end
-  it "should define methods on the context" do
-    dep('params test', :a_param).context.define!.should respond_to(:a_param)
-  end
-  it "should raise on conflicting methods" do
-    L{
-      dep('conflicting param names', :name).context.define!
-    }.should raise_error(DepParameterError, "You can't use :name as a parameter (on 'conflicting param names'), because that's already a method on Babushka::DepDefiner.")
-  end
-  it "should discard the context" do
-    dep('context discarding').tap {|dep|
-      dep.context.should_not == dep.with.context
-    }
-  end
-  it "should not pollute other deps" do
-    dep('params test', :a_param)
-    Dep('params test').context.define!.should respond_to(:a_param)
-    dep('paramless dep').context.define!.should_not respond_to(:a_param)
-  end
-  it "should return a param containing the value when it's set" do
-    dep('set params test', :a_set_param)
-    Dep('set params test').with('a value').context.define!.a_set_param.should be_an_instance_of(Parameter)
-    Dep('set params test').with('a value').context.define!.a_set_param.to_s.should == 'a value'
-  end
-  it "should ask for the value when it's not set" do
-    dep('unset params test', :an_unset_param).context.define!
-    Dep('unset params test').context.an_unset_param.should be_an_instance_of(Parameter)
-    Prompt.should_receive(:get_value).with('an_unset_param', {}).and_return('a value from the prompt')
-    Dep('unset params test').context.an_unset_param.to_s.should == 'a value from the prompt'
+    after { Base.sources.anonymous.templates.clear! }
   end
 end
 
 describe Dep, 'lambda lists' do
   before {
-    Babushka.host.stub!(:name).and_return(:test_name)
-    Babushka.host.stub!(:system).and_return(:test_system)
-    Babushka.host.stub!(:pkg_helper_key).and_return(:test_helper)
+    Babushka::Base.host.stub!(:name).and_return(:test_name)
+    Babushka::Base.host.stub!(:system).and_return(:test_system)
+    Babushka::Base.host.stub!(:pkg_helper_key).and_return(:test_helper)
 
     Babushka::SystemDefinitions.stub!(:all_names).and_return([:test_name, :other_name])
     Babushka::SystemDefinitions.stub!(:all_systems).and_return([:test_system, :other_system])
     Babushka::PkgHelper.stub!(:all_manager_keys).and_return([:test_helper, :other_helper])
   }
   it "should match against the system name" do
-    dep('lambda list name match') { requires { on :test_name, 'awesome' } }.context.define!.requires.should == ['awesome']
+    dep('lambda list name match') { requires { on :test_name, 'awesome' } }.context.requires.should == ['awesome']
   end
   it "should match against the system type" do
-    dep('lambda list system match') { requires { on :test_system, 'awesome' } }.context.define!.requires.should == ['awesome']
+    dep('lambda list system match') { requires { on :test_system, 'awesome' } }.context.requires.should == ['awesome']
   end
   it "should match against the system name" do
-    dep('lambda list pkg_helper_key match') { requires { on :test_helper, 'awesome' } }.context.define!.requires.should == ['awesome']
-  end
-end
-
-describe Dep, '#requirements_for' do
-  let(:dependency) {
-    dep('requirements_for specs') {
-      requires 'a dep'
-      requires 'another dep'.with(:some, :args)
-      requires 'a third'.with()
-    }.tap {|d|
-      d.context.define!
-    }
-  }
-  let(:requirements) {
-    dependency.send(:requirements_for, :requires)
-  }
-  it "should have the right number of requirements" do
-    requirements.length.should == 3
-  end
-  it "should return a Requirement for all the required deps" do
-    requirements.each {|c| c.should be_an_instance_of(Babushka::Dep::Requirement) }
-  end
-  it "should contain the right dep names" do
-    requirements.map(&:name).should == ['a dep', 'another dep', 'a third']
-  end
-  it "should work with empty args" do
-    requirements[0].args.should == []
-    requirements[2].args.should == []
-  end
-  context "arguments" do
-    let(:args) { requirements[1].args }
-    it "should have the right number of args" do
-      args.length.should == 2
-    end
-    it "should contain the right args" do
-      args.should == [:some, :args]
-    end
+    dep('lambda list pkg_helper_key match') { requires { on :test_helper, 'awesome' } }.context.requires.should == ['awesome']
   end
 end
 
@@ -507,7 +418,7 @@ describe "calling meet on a single dep" do
   end
   it "should fail fast and return nil on explicitly unmeetable deps" do
     make_counter_dep(
-      :name => 'explicitly unmeetable', :met? => L{ unmeetable! }
+      :name => 'explicitly unmeetable', :met? => L{ unmeetable }
     ).meet.should == nil
     @yield_counts['explicitly unmeetable'].should == @yield_counts_met_run
   end
@@ -525,7 +436,7 @@ describe "calling meet on a single dep" do
   end
   it "should fail, not run meet, and fail again on unmet deps where meet raises UnmeetableDep" do
     make_counter_dep(
-      :name => 'unmet, #before fails', :met? => L{ false }, :meet => L{ unmeetable! }
+      :name => 'unmet, #before fails', :met? => L{ false }, :meet => L{ unmeetable }
     ).meet.should == nil
     @yield_counts['unmet, #before fails'].should == @yield_counts_early_exit_meet_run
   end
@@ -544,6 +455,44 @@ describe "calling meet on a single dep" do
   after { Base.sources.anonymous.deps.clear! }
 end
 
+describe "args" do
+  it "should replace arguments" do
+    dep('arg replacing').with('a').with('b').args.should == %w[b]
+  end
+  it "should do make the args available within the dep like normal block arguments" do
+    outer, before_met, after_meet = nil, nil, nil
+    dep 'arg availability' do |a, b|
+      outer = a
+      met? {
+        before_met = b
+        a == b
+      }
+      meet {
+        a = b
+        after_meet = a
+      }
+    end.meet('a', 'b')
+    outer.should == 'a'
+    before_met.should == 'b'
+    after_meet.should == 'b'
+  end
+  it "should undefine the dep" do
+    @dep = dep('undefining args') {|a| }
+    @dep.with('a').define!
+    @dep.dep_defined?.should be_true
+    @dep.with('a')
+    @dep.dep_defined?.should be_nil
+  end
+  it "should uncache the dep" do
+    @dep = dep('uncaching args') {|a| }
+    @dep.with('a').process
+    @dep.send(:cached?).should be_true
+    @dep.with('a')
+    @dep.send(:cached?).should be_false
+  end
+end
+
+
 describe "run_in" do
   it "should run in the current directory when run_in isn't set" do
     cwd = Dir.pwd
@@ -554,13 +503,12 @@ describe "run_in" do
     Dir.pwd.should == cwd
     ran_in.should == cwd
   end
-  it "should not run when run_in is set to a nonexistent directory" do
-    ran_in = nil
-    dep 'dep with run_in set' do
-      run_in tmp_prefix / 'missing'
-      met? { ran_in = Dir.pwd }
-    end.met?
-    ran_in.should be_nil
+  it "should fail when run_in is set to a nonexistent directory" do
+    L{
+      dep 'dep with run_in set to a nonexistent dir' do
+        run_in((tmp_prefix / 'nonexistent').to_s)
+      end.met?
+    }.should raise_error(Errno::ENOENT, "No such file or directory - #{tmp_prefix / 'nonexistent'}")
   end
   it "should run in the specified directory when run_in is set" do
     cwd = Dir.pwd

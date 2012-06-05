@@ -7,12 +7,12 @@ module Babushka
 
     attr_reader :path
     def initialize path
-      @path = path.p
+      @path = path
     end
 
     def render source, opts = {}
       shell("cat > '#{path}'",
-        :input => inkan_output_for(source, opts),
+        :input => inkan_output_for(source, opts[:context]),
         :sudo => opts[:sudo]
       ).tap {|result|
         if result
@@ -22,7 +22,7 @@ module Babushka
     end
 
     def exists?
-      path.exists?
+      path.p.exists?
     end
 
     def clean?
@@ -33,28 +33,18 @@ module Babushka
       exists? && source_sha == sha_of(source)
     end
 
-    def source_sha
-      path.open {|f|
-        [f.gets, f.gets].compact.detect {|l|
-          l[/^#!/].nil? # The first line that isn't a hashbang
-        } || ''
-      }.scan(/, from ([0-9a-f]{40})\./).flatten.first
-    end
-
     private
 
-    def inkan_output_for source, opts = {}
+    def inkan_output_for source, custom_context
       Inkan.render {|inkan|
         inkan.credit = "Generated #{_by_babushka}, from #{sha_of(source)}"
-        inkan.comment = opts[:comment] if opts[:comment]
-        inkan.comment_suffix = opts[:comment_suffix] if opts[:comment_suffix]
-        inkan.print render_erb(source, opts[:context])
+        inkan.print render_erb(source, custom_context)
       }
     end
 
     def render_erb source, custom_context
       require 'erb'
-      (custom_context || self).instance_eval {
+      (custom_context || self).instance_exec {
         ERB.new(source.p.read).result(binding)
       }
     end
@@ -64,6 +54,12 @@ module Babushka
       raise "Source doesn't exist: #{source.p}" unless source.p.exists?
       Digest::SHA1.hexdigest(source.p.read)
     end
+
+    def source_sha
+      File.open(path.p) {|f|
+        first_line = f.gets
+        first_line[/\A#!/] ? f.gets : first_line
+      }.scan(/, from ([0-9a-f]{40})\./).flatten.first
+    end
   end
 end
-

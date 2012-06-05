@@ -59,7 +59,7 @@ module Babushka
         }
       }
     end
-
+    
     def self.detect_type_by_contents path
       TYPES.keys.detect {|key|
         shell("file '#{path}'")[TYPES[key][:file_match]]
@@ -72,7 +72,6 @@ module Babushka
 
     TYPES = {
       :deb => {:file_match => 'Debian binary package', :exts => %w[deb]},
-      :pkg => {:file_match => 'xar archive', :exts => %w[pkg]},
       :tar => {:file_match => 'tar archive', :exts => %w[tar]},
       :gzip => {:file_match => 'gzip compressed data', :exts => %w[tgz tar.gz]},
       :bzip2 => {:file_match => 'bzip2 compressed data', :exts => %w[tbz2 tar.bz2]},
@@ -100,14 +99,15 @@ module Babushka
     end
 
     def extract &block
-      cd(archive_prefix, :create => true) { process_extract(&block) }
+      cd(archive_prefix, :create => true) { process_extract &block }
     end
 
     def process_extract &block
       shell("mkdir -p '#{name}'") and
       cd(name) {
         unless log_shell("Extracting #{filename}", extract_command)
-          log_error "Couldn't extract #{path} - probably a bad download."
+          log_error "Couldn't extract #{path}."
+          log "(The file is probably corrupt - maybe the download was cancelled before it finished?)"
         else
           cd(content_subdir) {
             block.nil? or block.call(self)
@@ -127,14 +127,9 @@ module Babushka
     end
 
     def identity_dirs
-      everything = Dir.glob('*')
-      if everything.length == 1 && File.directory?(everything.first)
-        everything
-      else
-        Dir.glob('*/').map {|dir| dir.chomp('/') }.select {|dir|
-          dir.downcase.gsub(/[ \-_\.]/, '') == name.downcase.gsub(/[ \-_\.]/, '')
-        }
-      end
+      Dir.glob('*/').map {|dir| dir.chomp('/') }.select {|dir|
+        dir.downcase.gsub(/[ -_\.]/, '') == name.downcase.gsub(/[ -_\.]/, '')
+      }
     end
 
     def archive_prefix
@@ -142,7 +137,7 @@ module Babushka
     end
   end
 
-  class FileResource < Resource
+  class DebResource < Resource
     def extract &block
       in_download_dir {
         block.call(self)
@@ -191,11 +186,10 @@ module Babushka
       output.scan(/\s+(\/Volumes\/[^\n]+)/).flatten.first
     end
   end
-
+  
   class Resource
     CLASSES = {
-      :deb => FileResource,
-      :pkg => FileResource,
+      :deb => DebResource,
       :tar => TarResource,
       :gzip => TarResource,
       :bzip2 => TarResource,

@@ -18,6 +18,11 @@ module Babushka
       end
     end
 
+    def in_dir dir, opts = {}, &block
+      log_error "#{caller.first}: #in_dir has been renamed to #cd." # deprecated
+      cd dir, opts, &block
+    end
+
     def in_build_dir path = '', &block
       cd Babushka::BuildPrefix / path, :create => true, &block
     end

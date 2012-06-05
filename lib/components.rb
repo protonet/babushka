@@ -23,15 +23,16 @@ module Babushka
     xml_string
     helpers/log_helpers
     helpers/shell_helpers
+    helpers/prompt_helpers
     helpers/path_helpers
     helpers/run_helpers
+    helpers/suggest_helpers
     helpers/git_helpers
     helpers/uri_helpers
     popen
     shell
     git_repo
     resource
-    prompt
     lambda_chooser
     ip
     version_str
@@ -52,7 +53,7 @@ module Babushka
     run_reporter
     bug_reporter
     pkg_helper
-    pkg_helpers/unknown_pkg_helper
+    pkg_helpers/base_helper
     pkg_helpers/apt_helper
     pkg_helpers/yum_helper
     pkg_helpers/brew_helper
@@ -60,19 +61,16 @@ module Babushka
     pkg_helpers/macports_helper
     pkg_helpers/src_helper
     pkg_helpers/pip_helper
-    pkg_helpers/binpkgsrc_helper
-    pkg_helpers/binports_helper
     pkg_helpers/npm_helper
     pkg_helpers/pacman_helper
-    dsl
     dep
     dep_pool
+    meta_dep_pool
     task
     source
     source_pool
     vars
-    parameter
-    path_checker
+    dep_runners/base_dep_runner
     dep_definer
     dep_context
     meta_dep

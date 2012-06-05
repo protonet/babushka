@@ -1,5 +1,8 @@
 module Babushka
   class DepDefiner
+    class UnmeetableDep < DepError
+    end
+
     include LogHelpers
     extend LogHelpers
     include ShellHelpers
@@ -9,8 +12,6 @@ module Babushka
     include RunHelpers
     extend RunHelpers
 
-    include Prompt::Helpers
-    extend Prompt::Helpers
     include VersionOf::Helpers
     extend VersionOf::Helpers
 
@@ -31,26 +32,23 @@ module Babushka
       @dependency = dep
       @payload = {}
       @block = block
-      @loaded, @failed = false, false
     end
-
-    def loaded?; @loaded end
-    def failed?; @failed end
 
     def define!
-      unless loaded? || failed?
-        define_elements!
-        @loaded, @failed = true, false
-      end
-      self
-    rescue StandardError => e
-      @loaded, @failed = false, true
-      raise e
-    end
+      if block.nil?
+        # nothing to do
+      else
+        arity = block.arity
+        # ruby 1.8 doesn't support variable numbers of block arguments. Instead, when #arity is -1
+        # it means there was no argument block: on 1.8, proc{}.arity == -1, and proc{|| }.arity == 0.
+        arity = 0 if arity < 0 && RUBY_VERSION.starts_with?('1.8')
 
-    def invoke task_name
-      define! unless loaded?
-      instance_eval &send(task_name) unless failed?
+        if dependency.args.length != arity
+          raise DepArgumentError, "The dep '#{dependency.name}' requires #{arity} argument#{'s' unless arity == 1}, but #{dependency.args.length} #{dependency.args.length == 1 ? 'was' : 'were'} passed."
+        else
+          instance_exec *dependency.args, &block
+        end
+      end
     end
 
     def result message, opts = {}
@@ -60,62 +58,33 @@ module Babushka
     end
 
     def met message
-      deprecated! "2012-06-22", :instead => "a truthy return value from met?{} (maybe using #log_ok)"
       result message, :result => true
     end
 
     def unmet message
-      deprecated! "2012-06-22", :instead => "a falsey return value from met?{} (maybe using #log)"
       result message, :result => false
     end
 
     def unmeetable message
-      deprecated! "2012-06-22", :instead => "#unmeetable!"
-      raise Babushka::UnmeetableDep, message
+      raise UnmeetableDep, message
     end
 
-    def unmeetable! message
-      raise Babushka::UnmeetableDep, message
+    def file_and_line
+      get_file_and_line_for(block)
     end
 
-    def source_location
-      get_source_location_for(block)
+    def file_and_line_for block_name
+      get_file_and_line_for send(block_name) if has_block? block_name
     end
 
-    def source_location_for block_name
-      get_source_location_for send(block_name) if has_block? block_name
-    end
-
-    def get_source_location_for blk
-      if blk.respond_to?(:source_location) # Not present on cruby-1.8.
-        blk.source_location
-      else
-        blk.inspect.scan(/\#\<Proc\:0x[0-9a-f]+\@([^:]+):(\d+)>/).flatten
-      end
+    def get_file_and_line_for blk
+      blk.inspect.scan(/\#\<Proc\:0x[0-9a-f]+\@([^:]+):(\d+)>/).flatten
     end
 
     private
 
-    def define_elements!
-      debug "(defining #{dependency.name} against #{dependency.template.contextual_name})"
-      define_params!
-      instance_eval(&block) unless block.nil?
-    end
-
-    def define_params!
-      dependency.params.each {|param|
-        if respond_to?(param)
-          raise DepParameterError, "You can't use #{param.inspect} as a parameter (on '#{dependency.name}'), because that's already a method on #{method(param).owner}."
-        else
-          metaclass.send :define_method, param do
-            dependency.args[param] ||= Parameter.new(param)
-          end
-        end
-      }
-    end
-
     def pkg_manager
-      UnknownPkgHelper
+      BaseHelper
     end
 
     def on platform, &blk
@@ -128,7 +97,7 @@ module Babushka
     end
 
     def chooser
-      Babushka.host.match_list
+      Base.host.match_list
     end
 
     def chooser_choices

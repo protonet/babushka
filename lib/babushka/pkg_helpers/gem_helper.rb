@@ -6,9 +6,17 @@ module Babushka
     def manager_key; :gem end
     def manager_dep; 'rubygems' end
 
+    def _install! pkgs, opts
+      pkgs.each {|pkg|
+        log_shell "Installing #{pkg} via #{manager_key}",
+          "#{pkg_cmd} install #{cmdline_spec_for pkg} #{opts}",
+          :sudo => should_sudo?
+      }
+    end
+
     def gem_path_for gem_name, version = nil
-      unless (detected_version = has?(Babushka.VersionOf(gem_name, version), :log => false)).nil?
-        gem_root / Babushka.VersionOf(gem_name, detected_version)
+      unless (detected_version = has?(VersionOf(gem_name, version), :log => false)).nil?
+        gem_root / VersionOf(gem_name, detected_version)
       end
     end
 
@@ -57,7 +65,7 @@ module Babushka
         # e.g. "/opt/ruby-enterprise/bin/ruby: Mach-O 64-bit executable x86_64"
         shell("file -L '#{ruby_path}'").sub(/.* /, '')
       else
-        Babushka.host.cpu_type
+        Base.host.cpu_type
       end
     end
 
@@ -82,19 +90,17 @@ module Babushka
       env_info.val_for('RUBYGEMS VERSION').to_version
     end
 
+    def update!
+      shell('gem update --system', :sudo => !which('gem').p.writable?).tap {|result|
+        @_cached_env_info = nil # `gem` changed, so this info needs re-fetching
+      }
+    end
+
 
     private
 
-    def has_pkg? pkg
+    def _has? pkg
       versions_of(pkg).sort.reverse.detect {|version| pkg.matches? version }
-    end
-
-    def install_pkgs! pkgs, opts
-      pkgs.each {|pkg|
-        log_shell "Installing #{pkg} via #{manager_key}",
-          "#{pkg_cmd} install #{cmdline_spec_for pkg} #{opts}",
-          :sudo => should_sudo?
-      }
     end
 
     def versions_of pkg

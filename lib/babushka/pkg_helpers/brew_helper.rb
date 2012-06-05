@@ -6,6 +6,19 @@ module Babushka
     def manager_key; :brew end
     def manager_dep; 'homebrew' end
 
+    def _install! pkgs, opts
+      check_for_formulas(pkgs) && pkgs.all? {|pkg|
+        log "Installing #{pkg} via #{manager_key}" do
+          shell(
+            "#{pkg_cmd} install #{cmdline_spec_for pkg} #{opts}",
+            :sudo => should_sudo?,
+            :log => true,
+            :closing_status => :status_only
+          )
+        end
+      }
+    end
+
     def update_pkg_lists_if_required
       super.tap {|result|
         pkg_list_dir.touch if result
@@ -19,26 +32,21 @@ module Babushka
     end
 
     def should_sudo?
-      super || !installed_pkgs_path.hypothetically_writable?
+      super || !File.writable?(installed_pkgs_path)
     end
+
 
     private
 
-    def has_pkg? pkg
-      versions_of(pkg).sort.reverse.detect {|version| pkg.matches? version }
+    class LibraryDep
+      attr_reader :names
+      def initialize *names
+        @names = names
+      end
     end
 
-    def install_pkgs! pkgs, opts
-      check_for_formulas(pkgs) && pkgs.all? {|pkg|
-        log "Installing #{pkg} via #{manager_key}" do
-          shell(
-            "#{pkg_cmd} install #{cmdline_spec_for pkg} #{opts}",
-            :sudo => should_sudo?,
-            :log => true,
-            :closing_status => :status_only
-          )
-        end
-      }
+    def _has? pkg
+      versions_of(pkg).sort.reverse.detect {|version| pkg.matches? version }
     end
 
     def check_for_formulas pkgs
@@ -63,13 +71,13 @@ module Babushka
       }.flatten.select {|i|
         i[/\d/] # For it to be a version, it has to have at least 1 digit.
       }.map {|i|
-        Babushka.VersionOf i.split('/', 2)
+        VersionOf i.split('/', 2)
       }.max.version
     end
 
     def versions_of pkg
       pkg_name = pkg.respond_to?(:name) ? pkg.name : pkg
-      Dir[
+      installed = Dir[
         installed_pkgs_path / pkg_name / '*'
       ].map {|i|
         File.basename i.chomp('/')
