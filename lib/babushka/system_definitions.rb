@@ -38,7 +38,8 @@ module Babushka
             '9.10'  => :karmic,
             '10.04' => :lucid,
             '10.10' => :maverick,
-            '11.04' => :natty
+            '11.04' => :natty,
+            '12.04' => :precise
           },
           :debian => {
             '4.0' => :etch,
@@ -75,7 +76,8 @@ module Babushka
             '9.10'  => 'Karmic Koala',
             '10.04' => 'Lucid Lynx',
             '10.10' => 'Maverick Meerkat',
-            '11.04' => 'Natty Narwhal'
+            '11.04' => 'Natty Narwhal',
+            '12.04' => 'Precise Pangolin'
           },
           :debian => {
             '5.0.4' => 'Lenny'
