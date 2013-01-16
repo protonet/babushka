@@ -97,17 +97,17 @@ module Babushka
       end
     end
 
-    def log_with_rescue *args
-      begin
-        log_without_rescue *args
-      rescue ArgumentError => e
-        log_error "ArgumentError Thrown but rescued: #{e.inspect}"
-        $stdout.flush
-        nil
-      end
-    end
-    alias_method :log_without_rescue, :log
-    alias_method :log, :log_with_rescue
+    # def log_with_rescue *args
+    #   begin
+    #     log_without_rescue *args
+    #   rescue ArgumentError => e
+    #     log_error "ArgumentError Thrown but rescued: #{e.inspect}"
+    #     $stdout.flush
+    #     nil
+    #   end
+    # end
+    # alias_method :log_without_rescue, :log
+    # alias_method :log, :log_with_rescue
 
   end
 
