@@ -26,7 +26,7 @@ module Babushka
       if !path.directory?
         raise ArgumentError, "The path #{path} isn't a directory."
       else
-        remote = cd(path) { shell "git config remote.origin.url; true" }
+        remote = cd(path) { shell "git config remote.origin.url" }
         if remote.nil?
           Source.new path # local source
         else
